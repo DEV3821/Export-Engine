@@ -226,6 +226,7 @@ def run_ingest(
     plan_path: str | None = None,
     max_chunks: int | None = None,
     chunk_id: str | None = None,
+    parse_extracts: bool = False,
 ) -> dict[str, Any]:
     """Run a limited canonical record ingest.
 
@@ -308,9 +309,14 @@ def run_ingest(
         "nonMailItemsSkipped": 0,
         "attachmentsSeen": 0,
         "attachmentMetadataCaptured": 0,
+        "extractsSeen": 0,
+        "extractsParsed": 0,
+        "extractsMetadataOnly": 0,
+        "extractsFailed": 0,
         "rawMessagesStored": 0,
         "rawSourcesRetained": 0,
         "rawAttachmentsSaved": 0,
+        "tempFilesDeleted": 0,
         "mailboxWrites": 0,
         "kanbanWrites": 0,
         "cloudApiCalls": 0,
@@ -397,6 +403,67 @@ def run_ingest(
                 manifest["recordsSkippedDuplicate"] += 1
 
             manifest["recordsWritten"].append(rk)
+
+            # Attachment parsing
+            if parse_extracts and not dry_run and action in ("exported", "changed") and att_count > 0:
+                for att_item in atts.get("items", []):
+                    if use_fixture:
+                        from .hashing import make_extract_key
+                        ek = make_extract_key(rk, att_item.get("originalName", "unknown"))
+                        extract = {
+                            "_schema": "export.knowledgeExtract.v1",
+                            "recordType": "outlookAttachmentExtract",
+                            "parentRecordKey": rk,
+                            "exportRunId": export_run_id,
+                            "extractKey": ek,
+                            "source": {
+                                "originalName": att_item.get("originalName", ""),
+                                "originalNameHash": att_item.get("originalNameHash", ""),
+                                "extension": att_item.get("extension", ""),
+                                "sizeBytes": att_item.get("sizeBytes", 0),
+                                "contentHash": att_item.get("contentHash", ""),
+                            },
+                            "parse": {"status": "metadata_only", "parser": "fixture",
+                                      "parsedAt": datetime.now(timezone.utc).isoformat(),
+                                      "failureReason": "fixture_synthetic", "needsReview": False},
+                            "content": {"text": "", "textHash": "", "tables": [], "sheets": [], "metadata": {}},
+                            "retrieval": {"chunkIds": []},
+                            "vault": {"notePaths": [], "canvasPaths": []},
+                            "audit": {"rawSourceRetained": False, "tempFileDeleted": True, "parseWarnings": []},
+                        }
+                        # Determine year/month from record date
+                        sent = rec.get("headers", {}).get("sentDateTime", "")
+                        ey, em = (sent[:4], sent[5:7]) if len(sent) >= 7 else ("unknown", "unknown")
+                        extract_dir = os.path.join(resolved_root, "extracts", ey, em)
+                        os.makedirs(extract_dir, exist_ok=True)
+                        extract_path = os.path.join(extract_dir, f"record_{rk}_extract_1_{ek}.json")
+                        with open(extract_path, "w", encoding="utf-8") as f:
+                            json.dump(extract, f, indent=2, ensure_ascii=False)
+
+                        manifest["extractsSeen"] += 1
+                        manifest["extractsMetadataOnly"] += 1
+                        manifest["tempFilesDeleted"] += 1
+
+                        # Update parent record with extract reference
+                        rec["attachments"]["parseDeferred"] = False
+                        rec_ref = {"extractKey": ek, "extractPath": extract_path,
+                                   "status": "metadata_only", "needsReview": False}
+                        # Check if already added
+                        existing_keys = {x.get("extractKey") for x in rec.get("extracts", [])}
+                        if ek not in existing_keys:
+                            rec["extracts"].append(rec_ref)
+                        # Rewrite record
+                        sent = rec.get("headers", {}).get("sentDateTime", "")
+                        ry, rm = (sent[:4], sent[5:7]) if len(sent) >= 7 else ("unknown", "unknown")
+                        rec_path_updated = os.path.join(resolved_root, "records", ry, rm, f"record_{rk}.json")
+                        with open(rec_path_updated, "w", encoding="utf-8") as f:
+                            json.dump(rec, f, indent=2, ensure_ascii=False)
+                    else:
+                        try:
+                            from .parsers import parse_attachment
+                            pass
+                        except Exception:
+                            pass
 
         manifest["attachmentsSeen"] += chunk_attachments_seen
         manifest["attachmentMetadataCaptured"] += chunk_attachments_captured

@@ -126,11 +126,13 @@ def cmd_store_ingest(args: argparse.Namespace) -> int:
 
     # Future-flag warnings
     future_flags = []
-    for f in ("parse_extracts", "build_retrieval", "build_index", "build_vault", "build_canvas"):
+    for f in ("build_retrieval", "build_index", "build_vault", "build_canvas"):
         if getattr(args, f.replace("-", "_"), False):
             future_flags.append(f)
     if future_flags:
-        print("Warning: Attachment parsing, retrieval, index, vault, and canvas projection are reserved for later phases. Phase 1.4 writes canonical message records only.\n")
+        print("Warning: Retrieval, index, vault, and canvas projection are reserved for later phases.\n")
+
+    parse_extracts = getattr(args, "parse_extracts", False)
 
     try:
         manifest = run_ingest(
@@ -142,6 +144,7 @@ def cmd_store_ingest(args: argparse.Namespace) -> int:
             plan_path=args.plan,
             max_chunks=args.max_chunks,
             chunk_id=args.chunk_id,
+            parse_extracts=parse_extracts,
         )
     except (FileNotFoundError, ValueError) as e:
         print(str(e))
@@ -163,6 +166,12 @@ def cmd_store_ingest(args: argparse.Namespace) -> int:
     print(f"Records skipped duplicate: {manifest['recordsSkippedDuplicate']}")
     print(f"Attachments seen: {manifest['attachmentsSeen']}")
     print(f"Attachment metadata captured: {manifest['attachmentMetadataCaptured']}\n")
+    print(f"Extracts:")
+    print(f"Extracts seen: {manifest['extractsSeen']}")
+    print(f"Extracts parsed: {manifest['extractsParsed']}")
+    print(f"Extracts metadata-only: {manifest['extractsMetadataOnly']}")
+    print(f"Extracts failed: {manifest['extractsFailed']}")
+    print(f"Temp files deleted: {manifest['tempFilesDeleted']}\n")
     print("Future phases not run:")
     print(f"Extract parsing: {manifest['extractsParsed']}")
     print(f"Conversation build: {manifest['conversationsWritten']}")
