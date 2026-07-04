@@ -1,0 +1,45 @@
+# --- Phase 1 — Local Knowledge Store Export Engine ---
+# Do not commit real mailbox-derived data.
+
+# Evidence store
+KnowledgeStore/
+**/KnowledgeStore/
+
+# Raw source formats (never committed)
+*.msg
+*.eml
+
+# Local indexes and databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local runtime outputs (test artifacts, temp files)
+tmp/
+temp/

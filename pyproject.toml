@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "export_engine"
+version = "0.1.0"
+description = "Local Knowledge Store Export Engine — Phase 1"
+requires-python = ">=3.10"
+authors = []
+
+[project.scripts]
+export-engine = "export_engine.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["export_engine*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.compileall]
+directories = ["export_engine"]
