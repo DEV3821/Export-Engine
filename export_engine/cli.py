@@ -25,7 +25,6 @@ def cmd_store_status(args: argparse.Namespace) -> int:
     """Print neutral store status."""
     store_root = get_store_root()
     store_root = os.path.abspath(store_root)
-
     lines = [
         "Local Knowledge Store",
         "",
@@ -52,7 +51,6 @@ def cmd_store_status(args: argparse.Namespace) -> int:
 
 
 def cmd_store_verify(args: argparse.Namespace) -> int:
-    """Run store verification."""
     store_root = get_store_root()
     repo_path = os.path.abspath(".") if args.check_repo else None
     result = run_verification(store_root=store_root, repo_path=repo_path)
@@ -61,181 +59,163 @@ def cmd_store_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_store_source_scan(args: argparse.Namespace) -> int:
-    """Run source scan against primary Outlook store (or fixture)."""
     from .source_scan import run_source_scan
-
     store_root = get_store_root()
-
     if not args.fixture and not outlook_available():
-        print(
-            "Outlook COM unavailable. Install/use on Windows with Outlook configured, "
-            "or run with --fixture for fixture source tests."
-        )
+        print("Outlook COM unavailable. Install/use on Windows with Outlook configured, or run with --fixture for fixture source tests.")
         return 1
-
     if args.include_shared_stores or args.include_archive_store:
-        print(
-            "Warning: multi-store scanning is reserved for a later explicit safety phase. "
-            "Only the primary user store will be scanned."
-        )
-
+        print("Warning: multi-store scanning is reserved for a later explicit safety phase. Only the primary user store will be scanned.")
     try:
-        catalog = run_source_scan(
-            store_root,
-            use_fixture=args.fixture,
-            include_deleted=args.include_deleted,
-            include_junk=args.include_junk,
-            include_drafts=args.include_drafts,
-        )
+        catalog = run_source_scan(store_root, use_fixture=args.fixture, include_deleted=args.include_deleted, include_junk=args.include_junk, include_drafts=args.include_drafts)
     except RuntimeError as e:
         print(str(e))
         return 1
-
     included = sum(1 for f in catalog["folders"] if f["included"])
     excluded = sum(1 for f in catalog["folders"] if not f["included"])
-
     print(f"Local Knowledge Store source scan")
     print(f"Source adapter: Outlook COM")
     print(f"Scope: {OUTLOOK_SCOPE}")
-    print(f"Mailbox write: disabled")
-    print(f"Kanban write: disabled")
-    print(f"Cloud/API calls: disabled")
-    print(f"Raw source retention: disabled")
-    print()
+    print(f"Mailbox write: disabled\nKanban write: disabled\nCloud/API calls: disabled\nRaw source retention: disabled\n")
     print(f"Store: {catalog['storeDisplayName']}")
     print(f"Folders seen: {len(catalog['folders'])}")
-    print(f"Folders included: {included}")
-    print(f"Folders excluded: {excluded}")
-    print(f"Excluded stores: {len(catalog['excludedStores'])}")
-    print()
+    print(f"Folders included: {included}\nFolders excluded: {excluded}")
+    print(f"Excluded stores: {len(catalog['excludedStores'])}\n")
     print(f"Catalog: (written to catalog/source_catalog_latest.json)")
     print(f"Run manifest: (written to runs/source_scan_*.json)")
     return 0
 
 
 def cmd_store_plan_ingest(args: argparse.Namespace) -> int:
-    """Create a resumable historic backfill plan from the latest source catalog."""
     from .planning import create_backfill_plan
-
     store_root = args.store_root or get_store_root()
     use_fixture = args.fixture
-
-    # Check source catalog exists (unless fixture or refresh)
     if not use_fixture and not args.refresh_source_catalog:
         cat_path = os.path.join(store_root, "catalog", "source_catalog_latest.json")
         if not os.path.isfile(cat_path):
-            print(
-                "No source catalog found. Run store-source-scan --all-user-folders first, "
-                "or use --refresh-source-catalog."
-            )
+            print("No source catalog found. Run store-source-scan --all-user-folders first, or use --refresh-source-catalog.")
             return 1
+    try:
+        plan = create_backfill_plan(store_root, use_fixture=use_fixture, since=args.since, until=args.until, refresh_source_catalog=args.refresh_source_catalog)
+    except (FileNotFoundError, ValueError) as e:
+        print(str(e))
+        return 1
+    n_folders, n_chunks = len(plan["folders"]), len(plan["chunks"])
+    print(f"Local Knowledge Store historic backfill plan")
+    print(f"Scope: {plan['scope']}")
+    print(f"Since: {plan['since']}  Until: {plan['until']}")
+    print(f"Backfill chunks: {plan['chunkMode']}  Backfill chunk purpose: {plan['chunkPurpose']}")
+    print(f"Folders planned: {n_folders}  Chunks planned: {n_chunks}")
+    print(f"Estimated items: {plan['estimatedItems']}  Estimated extracts: {plan['estimatedExtracts']}\n")
+    print(f"Near-live refresh after backfill: {plan['nearLiveAfterBackfill']['mode']}")
+    print(f"Default polling interval: {plan['nearLiveAfterBackfill']['defaultPollingIntervalMinutes']} minutes")
+    print(f"Minimum polling interval: {plan['nearLiveAfterBackfill']['minimumPollingIntervalMinutes']} minute\n")
+    print(f"Mailbox write: disabled\nKanban write: disabled\nCloud/API calls: disabled\nRaw source retention: disabled\n")
+    print(f"Plan: (written to runs/ingest_plan_*.json)")
+    print(f"Backfill state: (written to state/backfill_state.json)")
+    print(f"Refresh state: (written to state/refresh_state.json)")
+    if use_fixture: print("Fixture mode: enabled")
+    return 0
+
+
+def cmd_store_ingest(args: argparse.Namespace) -> int:
+    """Run limited canonical record ingest."""
+    from .ingest import run_ingest
+
+    store_root = args.store_root or get_store_root()
+
+    # Future-flag warnings
+    future_flags = []
+    for f in ("parse_extracts", "build_retrieval", "build_index", "build_vault", "build_canvas"):
+        if getattr(args, f.replace("-", "_"), False):
+            future_flags.append(f)
+    if future_flags:
+        print("Warning: Attachment parsing, retrieval, index, vault, and canvas projection are reserved for later phases. Phase 1.4 writes canonical message records only.\n")
 
     try:
-        plan = create_backfill_plan(
+        manifest = run_ingest(
             store_root,
-            use_fixture=use_fixture,
-            since=args.since,
-            until=args.until,
-            refresh_source_catalog=args.refresh_source_catalog,
+            use_fixture=args.fixture,
+            limit=args.limit,
+            resume=args.resume,
+            dry_run=args.dry_run,
+            plan_path=args.plan,
+            max_chunks=args.max_chunks,
+            chunk_id=args.chunk_id,
         )
     except (FileNotFoundError, ValueError) as e:
         print(str(e))
         return 1
 
-    n_folders = len(plan["folders"])
-    n_chunks = len(plan["chunks"])
-
-    print(f"Local Knowledge Store historic backfill plan")
-    print(f"Scope: {plan['scope']}")
-    print(f"Source catalog: {plan.get('sourceCatalogPath', '(created by planner)')}")
-    print(f"Since: {plan['since']}")
-    print(f"Until: {plan['until']}")
-    print(f"Backfill chunks: {plan['chunkMode']}")
-    print(f"Backfill chunk purpose: {plan['chunkPurpose']}")
-    print(f"Folders planned: {n_folders}")
-    print(f"Chunks planned: {n_chunks}")
-    print(f"Estimated items: {plan['estimatedItems']}")
-    print(f"Estimated extracts: {plan['estimatedExtracts']}")
-    print()
-    print(f"Near-live refresh after backfill: {plan['nearLiveAfterBackfill']['mode']}")
-    print(f"Default polling interval: {plan['nearLiveAfterBackfill']['defaultPollingIntervalMinutes']} minutes")
-    print(f"Minimum polling interval: {plan['nearLiveAfterBackfill']['minimumPollingIntervalMinutes']} minute")
-    print()
-    print(f"Mailbox write: disabled")
-    print(f"Kanban write: disabled")
-    print(f"Cloud/API calls: disabled")
-    print(f"Raw source retention: disabled")
-    print()
-    print(f"Plan: (written to runs/ingest_plan_*.json)")
-    print(f"Backfill state: (written to state/backfill_state.json)")
-    print(f"Refresh state: (written to state/refresh_state.json)")
-    if use_fixture:
-        print(f"Fixture mode: enabled")
-    return 0
-
-
-def cmd_store_ingest(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
-    print("store-ingest: not implemented in this phase")
+    print(f"Local Knowledge Store record ingest")
+    print(f"Scope: {manifest['scope']}")
+    print(f"Mode: historic backfill record ingest")
+    print(f"Plan: {manifest['planPath']}")
+    print(f"Backfill state: {manifest['backfillStatePath']}")
+    print(f"Limit: {manifest['limit'] or 'none'}  Resume: {'enabled' if manifest['resume'] else 'disabled'}  Dry run: {'enabled' if manifest['dryRun'] else 'disabled'}\n")
+    print(f"Chunks attempted: {manifest['chunksAttempted']}")
+    print(f"Chunks completed: {manifest['chunksCompleted']}")
+    print(f"Chunks partial: {manifest['chunksPartial']}")
+    print(f"Chunks failed: {manifest['chunksFailed']}")
+    print(f"Records seen: {manifest['recordsSeen']}")
+    print(f"Records exported: {manifest['recordsExported']}")
+    print(f"Records changed: {manifest['recordsChanged']}")
+    print(f"Records skipped duplicate: {manifest['recordsSkippedDuplicate']}")
+    print(f"Attachments seen: {manifest['attachmentsSeen']}")
+    print(f"Attachment metadata captured: {manifest['attachmentMetadataCaptured']}\n")
+    print("Future phases not run:")
+    print(f"Extract parsing: {manifest['extractsParsed']}")
+    print(f"Conversation build: {manifest['conversationsWritten']}")
+    print(f"Retrieval chunks: {manifest['retrievalChunksWritten']}")
+    print(f"SQLite rows: {manifest['sqliteRowsWritten']}")
+    print(f"Vault notes: {manifest['vaultNotesUpdated']}")
+    print(f"Canvas files: {manifest['canvasFilesUpdated']}\n")
+    print(f"Mailbox write: disabled\nKanban write: disabled\nCloud/API calls: disabled")
+    print(f"Raw .msg/.eml stored: {manifest['rawMessagesStored']}")
+    print(f"Raw attachments saved: {manifest['rawAttachmentsSaved']}")
+    print(f"Raw source retention: disabled\n")
+    print(f"Run manifest: (written to runs/ingest_run_*.json)")
+    if args.fixture: print("Fixture mode: enabled")
     return 0
 
 
 def cmd_store_refresh(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-refresh: not implemented in this phase")
     return 0
 
-
 def cmd_store_watch(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-watch: not implemented in this phase")
     return 0
 
-
 def cmd_store_search(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-search: not implemented in this phase")
     return 0
 
-
 def cmd_store_rebuild_index(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-rebuild-index: not implemented in this phase")
     return 0
 
-
 def cmd_store_build_vault(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-build-vault: not implemented in this phase")
     return 0
 
-
 def cmd_store_refresh_vault(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-refresh-vault: not implemented in this phase")
     return 0
 
-
 def cmd_store_build_canvas(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-build-canvas: not implemented in this phase")
     return 0
 
-
 def cmd_store_refresh_canvas(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-refresh-canvas: not implemented in this phase")
     return 0
 
-
 def cmd_store_protect(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-protect: not implemented in this phase")
     return 0
 
-
 def cmd_store_verify_protection(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.3."""
     print("store-verify-protection: not implemented in this phase")
     return 0
 
@@ -244,10 +224,7 @@ def cmd_store_verify_protection(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="export-engine",
-        description="Local Knowledge Store Export Engine — Phase 1",
-    )
+    parser = argparse.ArgumentParser(prog="export-engine", description="Local Knowledge Store Export Engine — Phase 1")
     sub = parser.add_subparsers(dest="command", required=True)
 
     # store-status
@@ -256,65 +233,55 @@ def build_parser() -> argparse.ArgumentParser:
 
     # store-verify
     p = sub.add_parser("store-verify", help="Verify store safety and layout")
-    p.add_argument(
-        "--check-repo",
-        action="store_true",
-        default=True,
-        help="Check that the store path is not inside the repo (default: on)",
-    )
+    p.add_argument("--check-repo", action="store_true", default=True)
     p.set_defaults(func=cmd_store_verify)
 
     # store-source-scan
     p = sub.add_parser("store-source-scan", help="Scan primary Outlook store for source folders")
-    p.add_argument("--all-user-folders", action="store_true", default=False,
-                   help="Scan all user folders (inbox + subfolders)")
-    p.add_argument("--fixture", action="store_true", default=False,
-                   help="Use fixture source instead of live Outlook (for testing)")
-    p.add_argument("--include-deleted", action="store_true", default=False,
-                   help="Include Deleted Items folder")
-    p.add_argument("--include-junk", action="store_true", default=False,
-                   help="Include Junk Email folder")
-    p.add_argument("--include-drafts", action="store_true", default=False,
-                   help="Include Drafts folder")
-    p.add_argument("--include-shared-stores", action="store_true", default=False,
-                   help="Include shared mailbox stores (reserved for later)")
-    p.add_argument("--include-archive-store", action="store_true", default=False,
-                   help="Include archive store (reserved for later)")
+    p.add_argument("--all-user-folders", action="store_true", default=False)
+    p.add_argument("--fixture", action="store_true", default=False)
+    p.add_argument("--include-deleted", action="store_true", default=False)
+    p.add_argument("--include-junk", action="store_true", default=False)
+    p.add_argument("--include-drafts", action="store_true", default=False)
+    p.add_argument("--include-shared-stores", action="store_true", default=False)
+    p.add_argument("--include-archive-store", action="store_true", default=False)
     p.set_defaults(func=cmd_store_source_scan)
 
     # store-plan-ingest
     p = sub.add_parser("store-plan-ingest", help="Create a resumable historic backfill plan")
-    p.add_argument("--all-user-folders", action="store_true", default=False,
-                   help="Include all user folders (default behaviour)")
-    p.add_argument("--since", type=str, default=None,
-                   help="Start date YYYY-MM-DD (default: 365 days ago)")
-    p.add_argument("--until", type=str, default=None,
-                   help="End date YYYY-MM-DD (default: today)")
-    p.add_argument("--chunk", type=str, default="monthly", choices=["monthly"],
-                   help="Historic backfill chunk mode (default: monthly)")
-    p.add_argument("--fixture", action="store_true", default=False,
-                   help="Use fixture source catalog (for testing)")
-    p.add_argument("--source-catalog", type=str, default=None,
-                   help="Path to source catalog (optional)")
-    p.add_argument("--store-root", type=str, default=None,
-                   help="Override store root path")
-    p.add_argument("--refresh-source-catalog", action="store_true", default=False,
-                   help="Re-run source scan before planning")
+    p.add_argument("--all-user-folders", action="store_true", default=False)
+    p.add_argument("--since", type=str, default=None)
+    p.add_argument("--until", type=str, default=None)
+    p.add_argument("--chunk", type=str, default="monthly", choices=["monthly"])
+    p.add_argument("--fixture", action="store_true", default=False)
+    p.add_argument("--source-catalog", type=str, default=None)
+    p.add_argument("--store-root", type=str, default=None)
+    p.add_argument("--refresh-source-catalog", action="store_true", default=False)
     p.set_defaults(func=cmd_store_plan_ingest)
+
+    # store-ingest
+    p = sub.add_parser("store-ingest", help="Run limited canonical record ingest")
+    p.add_argument("--fixture", action="store_true", default=False)
+    p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--resume", action="store_true", default=False)
+    p.add_argument("--dry-run", action="store_true", default=False, dest="dry_run")
+    p.add_argument("--plan", type=str, default=None)
+    p.add_argument("--store-root", type=str, default=None)
+    p.add_argument("--max-chunks", type=int, default=None)
+    p.add_argument("--chunk-id", type=str, default=None)
+    p.add_argument("--parse-extracts", action="store_true", default=False)
+    p.add_argument("--build-retrieval", action="store_true", default=False)
+    p.add_argument("--build-index", action="store_true", default=False)
+    p.add_argument("--build-vault", action="store_true", default=False)
+    p.add_argument("--build-canvas", action="store_true", default=False)
+    p.set_defaults(func=cmd_store_ingest)
 
     # Stub commands
     for cmd_name in [
-        "store-ingest",
-        "store-refresh",
-        "store-watch",
-        "store-search",
-        "store-rebuild-index",
-        "store-build-vault",
-        "store-refresh-vault",
-        "store-build-canvas",
-        "store-refresh-canvas",
-        "store-protect",
-        "store-verify-protection",
+        "store-refresh", "store-watch", "store-search",
+        "store-rebuild-index", "store-build-vault", "store-refresh-vault",
+        "store-build-canvas", "store-refresh-canvas",
+        "store-protect", "store-verify-protection",
     ]:
         p = sub.add_parser(cmd_name, help=f"Run {cmd_name}")
         p.set_defaults(func=_stub_for(cmd_name))
@@ -326,7 +293,6 @@ def _stub_for(cmd_name: str):
     def stub(args: argparse.Namespace) -> int:
         print(f"{cmd_name}: not implemented in this phase")
         return 0
-
     return stub
 
 
