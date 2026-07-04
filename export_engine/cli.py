@@ -174,6 +174,8 @@ def cmd_store_ingest(args: argparse.Namespace) -> int:
     print(f"Raw .msg/.eml stored: {manifest['rawMessagesStored']}")
     print(f"Raw attachments saved: {manifest['rawAttachmentsSaved']}")
     print(f"Raw source retention: disabled\n")
+    if manifest["recordsSeen"] == 0 and not args.fixture:
+        print("Warning: no records were exported. Check folder path resolution and date filters.\n")
     print(f"Run manifest: (written to runs/ingest_run_*.json)")
     if args.fixture: print("Fixture mode: enabled")
     return 0

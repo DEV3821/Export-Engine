@@ -325,11 +325,11 @@ def run_ingest(
         "errors": [],
     }
 
-    total_limit = limit or float("inf")
+    total_limit = limit or 0
     exported_count = 0
 
     for chunk in chunks_to_process:
-        if exported_count >= total_limit:
+        if total_limit and exported_count >= total_limit:
             break
 
         cid = chunk["chunkId"]
@@ -357,7 +357,7 @@ def run_ingest(
             )
 
         # Cap by remaining limit
-        remaining = int(total_limit - exported_count)
+        remaining = total_limit - exported_count if total_limit else len(records) + 1
         if len(records) > remaining:
             records = records[:remaining]
 
@@ -403,7 +403,7 @@ def run_ingest(
 
         # Update chunk state in backfill state
         chunk_exhausted = chunk_records_seen >= chunk.get("estimatedItems", 0) or not records
-        hit_limit = exported_count >= total_limit
+        hit_limit = total_limit and exported_count >= total_limit
 
         if dry_run:
             new_status = "pending"
@@ -460,9 +460,12 @@ def _enumerate_outlook_items(
 ) -> list[dict[str, Any]]:
     """Enumerate real Outlook items for a folder+date chunk.
 
-    Phase 1.4 limited implementation — delegates to win32com.
+    Uses a COM folder index built from rootFolder by canonical path.
     """
-    from .outlook_com_source import outlook_available, _win32com, _infer_default_role
+    from .outlook_com_source import (
+        outlook_available, _win32com, normalise_outlook_folder_path,
+        resolve_com_folder_by_path, build_folder_index,
+    )
 
     if not outlook_available():
         return []  # No items when Outlook unavailable
@@ -470,56 +473,87 @@ def _enumerate_outlook_items(
     outlook = _win32com.Dispatch("Outlook.Application")
     namespace = outlook.GetNamespace("MAPI")
 
-    # Resolve folder by path
-    # Walk from root folder using Store.GetRootFolder
     inbox = namespace.GetDefaultFolder(6)
     store = inbox.Store
     root = store.GetRootFolder()
 
+    # Build folder index keyed by lower-cased canonical path
+    idx, _ = build_folder_index(root, store_display_name=store_display_name)
     fp = chunk.get("folderPath", "")
-    # Normalise: strip leading backslash, split
-    parts = [p for p in fp.replace("\\", "/").split("/") if p]
+    canonical = normalise_outlook_folder_path(fp)
+    # The plan may contain legacy store-prefixed paths — normalise
+    canonical = normalise_outlook_folder_path(canonical, store_display_name=store_display_name)
 
-    target = root
-    for part in parts:
-        found = False
-        try:
-            for sub in target.Folders:
-                if str(sub.Name) == part:
-                    target = sub
-                    found = True
-                    break
-        except Exception:
-            break
-        if not found:
-            break
+    # Look up in index
+    folder_entry = idx.get(canonical.casefold())
+    if folder_entry is None:
+        return []
 
-    # Apply date filter
+    # Resolve the actual COM folder
+    target = resolve_com_folder_by_path(root, canonical)
+    if target is None:
+        return []
+
+    # Apply date filter with half-open range
     since = chunk.get("since", "")
     until = chunk.get("until", "")
 
     records: list[dict[str, Any]] = []
     try:
-        items = target.Items
-        # Try Restrict if dates available
+        all_items = target.Items
+
+        # Try Restrict first; fall back to Python-side filter if 0 items
+        items = all_items
+        use_python_filter = False
         if since and until:
             try:
-                since_dt = _parse_date(since).strftime("%m/%d/%Y %H:%M %p")
-                until_dt = _parse_date(until).strftime("%m/%d/%Y %H:%M %p")
+                from datetime import timedelta
+                since_dt_o = _parse_date(since)
+                until_dt_o = _parse_date(until) + timedelta(days=1)
+                since_str = since_dt_o.strftime("%m/%d/%Y %H:%M %p")
+                until_str = until_dt_o.strftime("%m/%d/%Y %H:%M %p")
                 role = chunk.get("defaultRole", "custom")
-                if role in ("sent",):
-                    filter_str = f"[SentOn] >= '{since_dt}' AND [SentOn] <= '{until_dt}'"
+                date_field = "SentOn" if role in ("sent",) else "ReceivedTime"
+                filter_str = f"[{date_field}] >= '{since_str}' AND [{date_field}] < '{until_str}'"
+                restricted = all_items.Restrict(filter_str)
+                if restricted.Count > 0:
+                    items = restricted
                 else:
-                    filter_str = f"[ReceivedTime] >= '{since_dt}' AND [ReceivedTime] <= '{until_dt}'"
-                items = items.Restrict(filter_str)
+                    use_python_filter = True
             except Exception:
-                pass
+                use_python_filter = True
+
+        # Build the date bounds once for Python-side filtering
+        py_sd = py_ud = None
+        if use_python_filter and since and until:
+            from datetime import timedelta
+            py_sd = _parse_date(since)
+            py_ud = _parse_date(until) + timedelta(days=1)
 
         for item in items:
             try:
+                # Skip non-mail items
                 msg_class = str(item.Class) if hasattr(item, "Class") else ""
                 if "Mail" not in msg_class and "IPM.Note" not in str(getattr(item, "MessageClass", "")):
-                    continue  # skip non-mail items
+                    continue
+
+                # Python-side date filter fallback
+                if use_python_filter and py_sd is not None and py_ud is not None:
+                    item_date = None
+                    try:
+                        date_field_name = "SentOn" if chunk.get("defaultRole") in ("sent",) else "ReceivedTime"
+                        item_date = getattr(item, date_field_name, None)
+                    except Exception:
+                        pass
+                    if item_date is not None:
+                        try:
+                            dt = item_date
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            if not (py_sd <= dt < py_ud):
+                                continue
+                        except Exception:
+                            pass
 
                 subj = str(getattr(item, "Subject", "") or "")
                 sent_dt = str(getattr(item, "SentOn", "") or "")
@@ -527,7 +561,6 @@ def _enumerate_outlook_items(
                 body = str(getattr(item, "Body", "") or "")
                 body_preview = body[:200]
 
-                # Build record key
                 entry_id = str(getattr(item, "EntryID", "") or "")
                 rk = stable_json_hash({
                     "entryId": entry_id,
@@ -538,15 +571,8 @@ def _enumerate_outlook_items(
                 from_name = str(getattr(item, "SenderName", "") or "")
                 from_email = str(getattr(item, "SenderEmailAddress", "") or "")
 
-                # Direction
                 role = chunk.get("defaultRole", "custom")
-                if role == "sent":
-                    direction = "sent"
-                elif role == "inbox":
-                    direction = "received"
-                else:
-                    direction = "unknown"
-
+                direction = "sent" if role == "sent" else ("received" if role == "inbox" else "unknown")
                 body_hash = sha256_text(body)
 
                 rec = {
@@ -562,7 +588,7 @@ def _enumerate_outlook_items(
                         "storeDisplayName": store_display_name,
                         "storeIdHash": store_id_hash,
                         "mailbox": store_display_name,
-                        "folderPath": fp,
+                        "folderPath": canonical,
                         "folderKey": folder.get("folderKey", ""),
                         "messageClass": str(getattr(item, "MessageClass", "")),
                         "direction": direction,
@@ -579,48 +605,40 @@ def _enumerate_outlook_items(
                     "headers": {
                         "subject": subj,
                         "from": {"displayName": from_name, "emailAddress": from_email, "emailAddressHash": sha256_text(from_email)},
-                        "to": [],
-                        "cc": [],
-                        "sentDateTime": sent_dt,
-                        "receivedDateTime": recv_dt,
+                        "to": [], "cc": [],
+                        "sentDateTime": sent_dt, "receivedDateTime": recv_dt,
                         "creationTime": str(getattr(item, "CreationTime", "") or ""),
                         "lastModificationTime": str(getattr(item, "LastModificationTime", "") or ""),
                     },
                     "content": {
-                        "bodyPreview": body_preview,
-                        "bodyText": body,
-                        "bodyTextHash": body_hash,
-                        "htmlStripped": True,
-                        "quotedTextIncluded": True,
-                        "cleaningNotes": [],
+                        "bodyPreview": body_preview, "bodyText": body, "bodyTextHash": body_hash,
+                        "htmlStripped": True, "quotedTextIncluded": True, "cleaningNotes": [],
                     },
                     "attachments": {
                         "count": int(getattr(item, "Attachments", None).Count if hasattr(item, "Attachments") and item.Attachments else 0),
-                        "metadataCaptured": True,
-                        "rawAttachmentsSaved": False,
-                        "parseDeferred": True,
-                        "items": [],
+                        "metadataCaptured": True, "rawAttachmentsSaved": False,
+                        "parseDeferred": True, "items": [],
                     },
                     "extracts": [],
                     "classification": {
                         "keywords": [], "ticketNumbers": [], "ipAddresses": [],
-                        "serverNames": [], "aeTitles": [], "possibleSystems": [],
-                        "possibleTopics": [],
+                        "serverNames": [], "aeTitles": [], "possibleSystems": [], "possibleTopics": [],
                     },
                     "retrieval": {"chunkIds": []},
                     "vault": {"notePaths": [], "canvasPaths": []},
                     "audit": {
-                        "mailboxWrite": False, "kanbanWrite": False,
-                        "cloudApiCalls": False, "rawMsgStored": False,
-                        "rawSourceRetained": False, "rawAttachmentsSaved": False,
+                        "mailboxWrite": False, "kanbanWrite": False, "cloudApiCalls": False,
+                        "rawMsgStored": False, "rawSourceRetained": False, "rawAttachmentsSaved": False,
                         "parseWarnings": [], "needsReview": False,
                     },
                 }
                 records.append(rec)
             except Exception:
-                manifest.get("nonMailItemsSkipped", 0)  # counted elsewhere
                 continue
     except Exception:
         pass
 
     return records
+
+
+
