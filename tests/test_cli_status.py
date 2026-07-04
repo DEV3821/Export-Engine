@@ -87,7 +87,6 @@ class TestStubCommands:
     """Stub commands must be listed in help and return cleanly."""
 
     STUB_COMMANDS = [
-        "store-plan-ingest",
         "store-ingest",
         "store-refresh",
         "store-watch",
@@ -121,6 +120,6 @@ class TestStubCommands:
 
             assert exit_code == 0, f"Command {cmd} returned non-zero"
             output = captured.getvalue()
-            assert "not implemented in Phase 1.1" in output, (
+            assert "not implemented in this phase" in output, (
                 f"Command {cmd} missing Phase 1.1 message"
             )

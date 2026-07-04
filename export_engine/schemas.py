@@ -22,6 +22,8 @@ def _safety_block() -> dict[str, bool]:
 SCHEMA_VERSION_SOURCE_CATALOG = "export.sourceCatalog.v1"
 SCHEMA_VERSION_SOURCE_SCAN_RUN = "export.sourceScanRun.v1"
 SCHEMA_VERSION_INGEST_PLAN = "export.ingestPlan.v1"
+SCHEMA_VERSION_BACKFILL_STATE = "export.backfillState.v1"
+SCHEMA_VERSION_REFRESH_STATE = "export.refreshState.v1"
 SCHEMA_VERSION_KNOWLEDGE_RECORD = "export.knowledgeRecord.v1"
 SCHEMA_VERSION_KNOWLEDGE_EXTRACT = "export.knowledgeExtract.v1"
 SCHEMA_VERSION_CONVERSATION = "export.conversation.v1"
@@ -139,11 +141,154 @@ def new_excluded_store_entry(
     }
 
 
-# ── Phase 1.1 compatible factories ─────────────────────────────────────
+# ── Phase 1.3 — Planner schemas ────────────────────────────────────────
+
+
+def new_ingest_plan_v1(
+    *,
+    plan_id: str = "",
+    source_catalog_path: str = "",
+    store_display_name: str = "",
+    store_id_hash: str = "",
+    since: str = "",
+    until: str = "",
+    chunk_mode: str = "monthly",
+) -> dict[str, Any]:
+    """Full ingest plan document for a historic backfill plan."""
+    return {
+        "_schema": SCHEMA_VERSION_INGEST_PLAN,
+        "planId": plan_id,
+        "createdAt": "",
+        "sourceCatalogPath": source_catalog_path,
+        "scope": "primary_user_store_only",
+        "storeDisplayName": store_display_name,
+        "storeIdHash": store_id_hash,
+        "since": since,
+        "until": until,
+        "chunkMode": chunk_mode,
+        "chunkPurpose": "historic_backfill",
+        "allUserFolders": True,
+        "nearLiveAfterBackfill": {
+            "enabled": True,
+            "mode": "polling_incremental_refresh",
+            "defaultPollingIntervalMinutes": 5,
+            "minimumPollingIntervalMinutes": 1,
+            "implementedInThisPhase": False,
+        },
+        "folders": [],
+        "chunks": [],
+        "estimatedItems": 0,
+        "estimatedExtracts": 0,
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "rawSourceRetained": False,
+        },
+        "warnings": [],
+        "errors": [],
+    }
+
+
+def new_plan_chunk(
+    *,
+    chunk_id: str = "",
+    folder_key: str = "",
+    folder_path: str = "",
+    display_name: str = "",
+    default_role: str = "unknown",
+    since: str = "",
+    until: str = "",
+    estimated_items: int = 0,
+) -> dict[str, Any]:
+    """A single monthly historic backfill chunk inside an ingest plan."""
+    return {
+        "chunkId": chunk_id,
+        "folderKey": folder_key,
+        "folderPath": folder_path,
+        "displayName": display_name,
+        "defaultRole": default_role,
+        "since": since,
+        "until": until,
+        "chunkPurpose": "historic_backfill",
+        "status": "pending",
+        "estimatedItems": estimated_items,
+        "estimatedExtracts": 0,
+        "attempts": 0,
+        "lastError": "",
+        "completedAt": "",
+    }
+
+
+def new_backfill_state(
+    *,
+    active_plan_id: str = "",
+    active_plan_path: str = "",
+    since: str = "",
+    until: str = "",
+) -> dict[str, Any]:
+    """Backfill state document tracking resume progress."""
+    return {
+        "_schema": SCHEMA_VERSION_BACKFILL_STATE,
+        "createdAt": "",
+        "updatedAt": "",
+        "activePlanId": active_plan_id,
+        "activePlanPath": active_plan_path,
+        "scope": "primary_user_store_only",
+        "chunkMode": "monthly",
+        "chunkPurpose": "historic_backfill",
+        "since": since,
+        "until": until,
+        "chunksTotal": 0,
+        "chunksPending": 0,
+        "chunksComplete": 0,
+        "chunksFailed": 0,
+        "nearLiveAfterBackfill": {
+            "enabled": True,
+            "mode": "polling_incremental_refresh",
+            "defaultPollingIntervalMinutes": 5,
+            "minimumPollingIntervalMinutes": 1,
+            "refreshStatePrepared": True,
+        },
+        "chunks": {},
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "rawSourceRetained": False,
+        },
+    }
+
+
+def new_refresh_state() -> dict[str, Any]:
+    """Refresh readiness state scaffold."""
+    return {
+        "_schema": SCHEMA_VERSION_REFRESH_STATE,
+        "createdAt": "",
+        "updatedAt": "",
+        "scope": "primary_user_store_only",
+        "mode": "polling_incremental_refresh",
+        "status": "waiting_for_backfill",
+        "enabledAfterBackfill": True,
+        "defaultPollingIntervalMinutes": 5,
+        "minimumPollingIntervalMinutes": 1,
+        "lastRefreshStartedAt": "",
+        "lastRefreshFinishedAt": "",
+        "folders": {},
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "rawSourceRetained": False,
+        },
+    }
+
+
+# ── Phase 1.1 / 1.2 compatible factories (unchanged) ───────────────────
 
 
 def new_ingest_plan(*, plan_id: str, source_catalog_id: str) -> dict[str, Any]:
-    """Skeleton for an ingest plan."""
+    """Skeleton for an ingest plan (backward compat)."""
     return {
         "_schema": SCHEMA_VERSION_INGEST_PLAN,
         "planId": plan_id,

@@ -66,7 +66,6 @@ def cmd_store_source_scan(args: argparse.Namespace) -> int:
 
     store_root = get_store_root()
 
-    # Live scan requires Outlook
     if not args.fixture and not outlook_available():
         print(
             "Outlook COM unavailable. Install/use on Windows with Outlook configured, "
@@ -74,7 +73,6 @@ def cmd_store_source_scan(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Multi-store warnings
     if args.include_shared_stores or args.include_archive_store:
         print(
             "Warning: multi-store scanning is reserved for a later explicit safety phase. "
@@ -116,74 +114,129 @@ def cmd_store_source_scan(args: argparse.Namespace) -> int:
 
 
 def cmd_store_plan_ingest(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-plan-ingest: not implemented in Phase 1.1")
+    """Create a resumable historic backfill plan from the latest source catalog."""
+    from .planning import create_backfill_plan
+
+    store_root = args.store_root or get_store_root()
+    use_fixture = args.fixture
+
+    # Check source catalog exists (unless fixture or refresh)
+    if not use_fixture and not args.refresh_source_catalog:
+        cat_path = os.path.join(store_root, "catalog", "source_catalog_latest.json")
+        if not os.path.isfile(cat_path):
+            print(
+                "No source catalog found. Run store-source-scan --all-user-folders first, "
+                "or use --refresh-source-catalog."
+            )
+            return 1
+
+    try:
+        plan = create_backfill_plan(
+            store_root,
+            use_fixture=use_fixture,
+            since=args.since,
+            until=args.until,
+            refresh_source_catalog=args.refresh_source_catalog,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        print(str(e))
+        return 1
+
+    n_folders = len(plan["folders"])
+    n_chunks = len(plan["chunks"])
+
+    print(f"Local Knowledge Store historic backfill plan")
+    print(f"Scope: {plan['scope']}")
+    print(f"Source catalog: {plan.get('sourceCatalogPath', '(created by planner)')}")
+    print(f"Since: {plan['since']}")
+    print(f"Until: {plan['until']}")
+    print(f"Backfill chunks: {plan['chunkMode']}")
+    print(f"Backfill chunk purpose: {plan['chunkPurpose']}")
+    print(f"Folders planned: {n_folders}")
+    print(f"Chunks planned: {n_chunks}")
+    print(f"Estimated items: {plan['estimatedItems']}")
+    print(f"Estimated extracts: {plan['estimatedExtracts']}")
+    print()
+    print(f"Near-live refresh after backfill: {plan['nearLiveAfterBackfill']['mode']}")
+    print(f"Default polling interval: {plan['nearLiveAfterBackfill']['defaultPollingIntervalMinutes']} minutes")
+    print(f"Minimum polling interval: {plan['nearLiveAfterBackfill']['minimumPollingIntervalMinutes']} minute")
+    print()
+    print(f"Mailbox write: disabled")
+    print(f"Kanban write: disabled")
+    print(f"Cloud/API calls: disabled")
+    print(f"Raw source retention: disabled")
+    print()
+    print(f"Plan: (written to runs/ingest_plan_*.json)")
+    print(f"Backfill state: (written to state/backfill_state.json)")
+    print(f"Refresh state: (written to state/refresh_state.json)")
+    if use_fixture:
+        print(f"Fixture mode: enabled")
     return 0
 
 
 def cmd_store_ingest(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-ingest: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-ingest: not implemented in this phase")
     return 0
 
 
 def cmd_store_refresh(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-refresh: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-refresh: not implemented in this phase")
     return 0
 
 
 def cmd_store_watch(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-watch: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-watch: not implemented in this phase")
     return 0
 
 
 def cmd_store_search(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-search: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-search: not implemented in this phase")
     return 0
 
 
 def cmd_store_rebuild_index(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-rebuild-index: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-rebuild-index: not implemented in this phase")
     return 0
 
 
 def cmd_store_build_vault(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-build-vault: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-build-vault: not implemented in this phase")
     return 0
 
 
 def cmd_store_refresh_vault(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-refresh-vault: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-refresh-vault: not implemented in this phase")
     return 0
 
 
 def cmd_store_build_canvas(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-build-canvas: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-build-canvas: not implemented in this phase")
     return 0
 
 
 def cmd_store_refresh_canvas(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-refresh-canvas: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-refresh-canvas: not implemented in this phase")
     return 0
 
 
 def cmd_store_protect(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-protect: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-protect: not implemented in this phase")
     return 0
 
 
 def cmd_store_verify_protection(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-verify-protection: not implemented in Phase 1.1")
+    """Stub — not implemented in Phase 1.3."""
+    print("store-verify-protection: not implemented in this phase")
     return 0
 
 
@@ -229,9 +282,28 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Include archive store (reserved for later)")
     p.set_defaults(func=cmd_store_source_scan)
 
+    # store-plan-ingest
+    p = sub.add_parser("store-plan-ingest", help="Create a resumable historic backfill plan")
+    p.add_argument("--all-user-folders", action="store_true", default=False,
+                   help="Include all user folders (default behaviour)")
+    p.add_argument("--since", type=str, default=None,
+                   help="Start date YYYY-MM-DD (default: 365 days ago)")
+    p.add_argument("--until", type=str, default=None,
+                   help="End date YYYY-MM-DD (default: today)")
+    p.add_argument("--chunk", type=str, default="monthly", choices=["monthly"],
+                   help="Historic backfill chunk mode (default: monthly)")
+    p.add_argument("--fixture", action="store_true", default=False,
+                   help="Use fixture source catalog (for testing)")
+    p.add_argument("--source-catalog", type=str, default=None,
+                   help="Path to source catalog (optional)")
+    p.add_argument("--store-root", type=str, default=None,
+                   help="Override store root path")
+    p.add_argument("--refresh-source-catalog", action="store_true", default=False,
+                   help="Re-run source scan before planning")
+    p.set_defaults(func=cmd_store_plan_ingest)
+
     # Stub commands
     for cmd_name in [
-        "store-plan-ingest",
         "store-ingest",
         "store-refresh",
         "store-watch",
@@ -252,7 +324,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _stub_for(cmd_name: str):
     def stub(args: argparse.Namespace) -> int:
-        print(f"{cmd_name}: not implemented in Phase 1.1")
+        print(f"{cmd_name}: not implemented in this phase")
         return 0
 
     return stub
