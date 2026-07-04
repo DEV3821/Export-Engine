@@ -50,10 +50,17 @@ class TestFixtureExclusions:
 
     def test_primary_store_folders_not_excluded(self) -> None:
         fixtures = build_default_fixtures()
+        # Only check folders NOT marked as excluded by their role
         for folder in fixtures["stores"]["primary"]["folders"]:
-            assert folder["isExcluded"] is False, (
-                f"Primary folder {folder['name']} should not be excluded"
-            )
+            if folder["name"] in ("Deleted Items", "Junk Email", "Drafts", "Outbox",
+                                  "Sync Issues", "Calendar", "Contacts"):
+                assert folder["isExcluded"] is True, (
+                    f"System folder {folder['name']} should be excluded"
+                )
+            else:
+                assert folder["isExcluded"] is False, (
+                    f"Primary folder {folder['name']} should not be excluded"
+                )
 
     def test_excluded_store_types(self) -> None:
         excluded = get_excluded_store_types()

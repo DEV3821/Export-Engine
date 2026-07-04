@@ -20,6 +20,7 @@ def _safety_block() -> dict[str, bool]:
 # ── Schema versions ────────────────────────────────────────────────────
 
 SCHEMA_VERSION_SOURCE_CATALOG = "export.sourceCatalog.v1"
+SCHEMA_VERSION_SOURCE_SCAN_RUN = "export.sourceScanRun.v1"
 SCHEMA_VERSION_INGEST_PLAN = "export.ingestPlan.v1"
 SCHEMA_VERSION_KNOWLEDGE_RECORD = "export.knowledgeRecord.v1"
 SCHEMA_VERSION_KNOWLEDGE_EXTRACT = "export.knowledgeExtract.v1"
@@ -33,7 +34,7 @@ SCHEMA_VERSION_REFRESH_RUN = "export.refreshRun.v1"
 
 
 def new_source_catalog_entry(*, folder_path: str, folder_type: str) -> dict[str, Any]:
-    """Skeleton for a source catalog entry."""
+    """Skeleton for a source catalog entry (single folder)."""
     return {
         "_schema": SCHEMA_VERSION_SOURCE_CATALOG,
         "folderPath": folder_path,
@@ -44,6 +45,101 @@ def new_source_catalog_entry(*, folder_path: str, folder_type: str) -> dict[str,
         "scannedAt": "",
         "_safety": _safety_block(),
     }
+
+
+def new_source_catalog(
+    *,
+    store_display_name: str = "",
+    store_id_hash: str = "",
+    scope: str = "primary_user_store_only",
+) -> dict[str, Any]:
+    """Full source catalog document for a completed scan."""
+    return {
+        "_schema": SCHEMA_VERSION_SOURCE_CATALOG,
+        "sourceAdapter": "OutlookComPrimaryStoreSource",
+        "scope": scope,
+        "storeDisplayName": store_display_name,
+        "storeIdHash": store_id_hash,
+        "scannedAt": "",
+        "folders": [],
+        "excludedStores": [],
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "rawSourceRetained": False,
+        },
+        "warnings": [],
+        "errors": [],
+    }
+
+
+def new_source_scan_run(
+    *,
+    run_id: str = "",
+    catalog_path: str = "",
+) -> dict[str, Any]:
+    """Source scan run manifest."""
+    return {
+        "_schema": SCHEMA_VERSION_SOURCE_SCAN_RUN,
+        "sourceAdapter": "OutlookComPrimaryStoreSource",
+        "scope": "primary_user_store_only",
+        "startedAt": "",
+        "finishedAt": "",
+        "storeDisplayName": "",
+        "storeIdHash": "",
+        "foldersSeen": 0,
+        "foldersIncluded": 0,
+        "foldersExcluded": 0,
+        "excludedStoresSeen": 0,
+        "mailboxWrites": 0,
+        "kanbanWrites": 0,
+        "cloudApiCalls": 0,
+        "rawMessagesStored": 0,
+        "rawSourcesRetained": 0,
+        "catalogPath": catalog_path,
+        "warnings": [],
+        "errors": [],
+    }
+
+
+def new_folder_entry(
+    *,
+    folder_key: str,
+    folder_path: str,
+    display_name: str,
+    default_role: str = "unknown",
+    item_count: int = 0,
+    included: bool = True,
+    excluded_reason: str = "",
+) -> dict[str, Any]:
+    """A single folder entry inside a source catalog."""
+    return {
+        "folderKey": folder_key,
+        "folderPath": folder_path,
+        "displayName": display_name,
+        "defaultRole": default_role,
+        "itemCount": item_count,
+        "included": included,
+        "excludedReason": excluded_reason,
+    }
+
+
+def new_excluded_store_entry(
+    *,
+    display_name: str,
+    store_id_hash: str,
+    reason: str = "additional_store_excluded_by_default",
+) -> dict[str, Any]:
+    """An excluded store entry inside a source catalog."""
+    return {
+        "displayName": display_name,
+        "storeIdHash": store_id_hash,
+        "reason": reason,
+    }
+
+
+# ── Phase 1.1 compatible factories ─────────────────────────────────────
 
 
 def new_ingest_plan(*, plan_id: str, source_catalog_id: str) -> dict[str, Any]:

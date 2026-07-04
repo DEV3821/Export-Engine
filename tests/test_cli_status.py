@@ -87,7 +87,6 @@ class TestStubCommands:
     """Stub commands must be listed in help and return cleanly."""
 
     STUB_COMMANDS = [
-        "store-source-scan",
         "store-plan-ingest",
         "store-ingest",
         "store-refresh",

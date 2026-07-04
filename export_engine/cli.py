@@ -16,12 +16,9 @@ from .config import (
     DEFAULT_POLLING_INTERVAL,
     MINIMUM_POLLING_INTERVAL,
 )
-from .paths import get_store_root, ensure_store_layout, ensure_vault_layout
+from .paths import get_store_root
 from .verify import run_verification, format_verification
-
-
-# ── Banned phrases that must not appear in output ──────────────────────
-# (Checked in tests only — do not inline into status output.)
+from .outlook_com_source import outlook_available
 
 
 def cmd_store_status(args: argparse.Namespace) -> int:
@@ -64,8 +61,57 @@ def cmd_store_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_store_source_scan(args: argparse.Namespace) -> int:
-    """Stub — not implemented in Phase 1.1."""
-    print("store-source-scan: not implemented in Phase 1.1")
+    """Run source scan against primary Outlook store (or fixture)."""
+    from .source_scan import run_source_scan
+
+    store_root = get_store_root()
+
+    # Live scan requires Outlook
+    if not args.fixture and not outlook_available():
+        print(
+            "Outlook COM unavailable. Install/use on Windows with Outlook configured, "
+            "or run with --fixture for fixture source tests."
+        )
+        return 1
+
+    # Multi-store warnings
+    if args.include_shared_stores or args.include_archive_store:
+        print(
+            "Warning: multi-store scanning is reserved for a later explicit safety phase. "
+            "Only the primary user store will be scanned."
+        )
+
+    try:
+        catalog = run_source_scan(
+            store_root,
+            use_fixture=args.fixture,
+            include_deleted=args.include_deleted,
+            include_junk=args.include_junk,
+            include_drafts=args.include_drafts,
+        )
+    except RuntimeError as e:
+        print(str(e))
+        return 1
+
+    included = sum(1 for f in catalog["folders"] if f["included"])
+    excluded = sum(1 for f in catalog["folders"] if not f["included"])
+
+    print(f"Local Knowledge Store source scan")
+    print(f"Source adapter: Outlook COM")
+    print(f"Scope: {OUTLOOK_SCOPE}")
+    print(f"Mailbox write: disabled")
+    print(f"Kanban write: disabled")
+    print(f"Cloud/API calls: disabled")
+    print(f"Raw source retention: disabled")
+    print()
+    print(f"Store: {catalog['storeDisplayName']}")
+    print(f"Folders seen: {len(catalog['folders'])}")
+    print(f"Folders included: {included}")
+    print(f"Folders excluded: {excluded}")
+    print(f"Excluded stores: {len(catalog['excludedStores'])}")
+    print()
+    print(f"Catalog: (written to catalog/source_catalog_latest.json)")
+    print(f"Run manifest: (written to runs/source_scan_*.json)")
     return 0
 
 
@@ -165,9 +211,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=cmd_store_verify)
 
+    # store-source-scan
+    p = sub.add_parser("store-source-scan", help="Scan primary Outlook store for source folders")
+    p.add_argument("--all-user-folders", action="store_true", default=False,
+                   help="Scan all user folders (inbox + subfolders)")
+    p.add_argument("--fixture", action="store_true", default=False,
+                   help="Use fixture source instead of live Outlook (for testing)")
+    p.add_argument("--include-deleted", action="store_true", default=False,
+                   help="Include Deleted Items folder")
+    p.add_argument("--include-junk", action="store_true", default=False,
+                   help="Include Junk Email folder")
+    p.add_argument("--include-drafts", action="store_true", default=False,
+                   help="Include Drafts folder")
+    p.add_argument("--include-shared-stores", action="store_true", default=False,
+                   help="Include shared mailbox stores (reserved for later)")
+    p.add_argument("--include-archive-store", action="store_true", default=False,
+                   help="Include archive store (reserved for later)")
+    p.set_defaults(func=cmd_store_source_scan)
+
     # Stub commands
     for cmd_name in [
-        "store-source-scan",
         "store-plan-ingest",
         "store-ingest",
         "store-refresh",

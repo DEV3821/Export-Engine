@@ -75,3 +75,40 @@ FORBIDDEN_STORE_PREFIXES = (
     "\\\\",      # UNC paths
     "//",        # UNC paths (forward-slash form)
 )
+
+# ── Outlook Folder Default Exclusions ───────────────────────────────────
+
+# Default roles that are always excluded from source scanning.
+EXCLUDED_FOLDER_ROLES = frozenset({
+    "deleted",
+    "junk",
+    "drafts",
+    "outbox",
+    "sync_issues",
+    "rss",
+    "conversation_history",
+    "calendar",
+    "contacts",
+    "tasks",
+    "notes",
+    "search",
+})
+
+# Default display names that are excluded even when the role is unknown.
+EXCLUDED_FOLDER_NAMES = frozenset({
+    "deleted items",
+    "junk email",
+    "drafts",
+    "outbox",
+    "sync issues",
+    "rss feeds",
+    "conversation history",
+    "calendar",
+    "contacts",
+    "tasks",
+    "notes",
+    "search folders",
+})
+
+# Store types excluded by default.
+EXCLUDED_STORE_TYPES = ("shared", "archive")
