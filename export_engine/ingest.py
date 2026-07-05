@@ -793,6 +793,20 @@ def run_ingest(
             status = sc.get("status", "pending")
             if status == "pending":
                 chunks_to_process.append(c)
+        # Also include runtime sub-chunks (from dense splitting) that are pending
+        for scid, sc in state_chunks.items():
+            if sc.get("parentChunkId") and sc.get("status") == "pending":
+                # Build a minimal chunk dict from state info
+                parent_id = sc.get("parentChunkId", "")
+                parent_chunk = next((c for c in plan["chunks"] if c["chunkId"] == parent_id), None)
+                if parent_chunk:
+                    sub_chunk = dict(parent_chunk)
+                    sub_chunk["chunkId"] = scid
+                    sub_chunk["since"] = sc.get("since", parent_chunk.get("since", ""))
+                    sub_chunk["until"] = sc.get("until", parent_chunk.get("until", ""))
+                    sub_chunk["_is_split_subchunk"] = True
+                    sub_chunk["_parentChunkId"] = parent_id
+                    chunks_to_process.append(sub_chunk)
     else:
         chunks_to_process = [c for c in plan["chunks"]]
 
