@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Build/dist
+build/
+dist/
+*.egg-info/
+
+# Local evidence stores - NEVER COMMIT
+KnowledgeStore/
+SAMI/KnowledgeStore/
+records/
+extracts/
+conversations/
+retrieval/
+indexes/
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.jsonl
+
+# Outlook/mail evidence - NEVER COMMIT
+*.msg
+*.eml
+*.pst
+*.ost
+
+# Raw attachments / archives / temp
+*.tmp
+*.temp
+*.zip
+*.7z
+*.rar
+
+# Local logs
+logs/
+*.log
+
+# Local config/secrets
+.env
+*.local.json
+secrets.*
