@@ -669,3 +669,75 @@ def new_sqlite_index_run(
         "warnings": [],
         "errors": [],
     }
+
+
+# ── Phase 1.7 — Query schemas ────────────────────────────────────────────
+
+
+def new_query_request(
+    *,
+    query_text: str = "",
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Query request schema for the evidence-bound local query adapter."""
+    return {
+        "_schema": "export.queryRequest.v1",
+        "queryText": query_text,
+        "limit": limit,
+        "filters": {
+            "dateFrom": None,
+            "dateTo": None,
+            "folderPath": None,
+            "folderKey": None,
+            "parentTypes": [],
+            "sourceKinds": [],
+            "includeExtracts": True,
+            "includeConversations": True,
+        },
+        "options": {
+            "requireEvidence": True,
+            "includeChunkText": False,
+            "maxChunkChars": 1200,
+            "minScore": 0.0,
+        },
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "outlookComUsed": False,
+            "hermesUsed": False,
+            "llmUsed": False,
+            "rawSourceRetained": False,
+        },
+    }
+
+
+def new_query_result(
+    *,
+    query_id: str = "",
+    query_text: str = "",
+    store_root: str = "",
+) -> dict[str, Any]:
+    """Query result schema for the evidence-bound local query adapter."""
+    return {
+        "_schema": "export.queryResult.v1",
+        "queryId": query_id,
+        "queryText": query_text,
+        "createdAt": "",
+        "storeRoot": store_root,
+        "sqlitePath": "",
+        "resultCount": 0,
+        "evidenceCount": 0,
+        "results": [],
+        "warnings": [],
+        "errors": [],
+        "audit": {
+            "mailboxWrites": 0,
+            "kanbanWrites": 0,
+            "cloudApiCalls": 0,
+            "outlookComUsed": False,
+            "hermesUsed": False,
+            "llmUsed": False,
+            "rawSourcesRetained": 0,
+        },
+    }

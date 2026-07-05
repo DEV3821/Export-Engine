@@ -314,6 +314,57 @@ def cmd_store_search(args: argparse.Namespace) -> int:
         print()
     return 0
 
+
+def cmd_store_query(args: argparse.Namespace) -> int:
+    from .query_adapter import run_local_query
+    store_root = args.store_root or get_store_root()
+    parent_types = args.parent_type if args.parent_type else None
+    source_kinds = args.source_kind if args.source_kind else None
+    try:
+        qr = run_local_query(
+            args.query, store_root,
+            limit=args.limit,
+            date_from=args.date_from,
+            date_to=args.date_to,
+            folder_path=args.folder_path,
+            folder_key=args.folder_key,
+            parent_types=parent_types,
+            source_kinds=source_kinds,
+            include_extracts=not args.no_extracts,
+            include_conversations=not args.no_conversations,
+            include_chunk_text=args.include_text,
+            max_chunk_chars=args.max_chunk_chars,
+            min_score=args.min_score,
+        )
+    except Exception as e:
+        print(f"Query error: {e}")
+        return 1
+
+    if args.as_json:
+        import json
+        print(json.dumps(qr, indent=2, ensure_ascii=False))
+        return 0
+
+    print(f"Local Knowledge Store query")
+    print(f"Query: {qr['queryText']}")
+    print(f"Results: {qr['resultCount']}  Evidence: {qr['evidenceCount']}")
+    print()
+    print("Local query only. No Outlook COM, no LLM, no Hermes, no mailbox write, no Kanban write.")
+    print()
+    for r in qr.get("results", []):
+        print(f"  {r['rank']}. {r['title']}")
+        dt = r.get("date", "") or "N/A"
+        fp = r.get("folderPath", "") or "N/A"
+        sk = r.get("sourceKind", r.get("parentType", ""))
+        print(f"     Date: {dt}  Path: {fp}  Kind: {sk}")
+        print(f"     Chunk: {r['chunkKey'][:24]}...")
+        print(f"     {r['textPreview'][:150]}...")
+        print()
+    if qr.get("warnings"):
+        for w in qr["warnings"]:
+            print(f"Warning: {w}")
+    return 0
+
 def cmd_store_protect(args: argparse.Namespace) -> int:
     print("store-protect: not implemented in this phase")
     return 0
@@ -404,6 +455,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", default=False, dest="as_json")
     p.add_argument("--store-root", type=str, default=None)
     p.set_defaults(func=cmd_store_search)
+
+    # store-query
+    p = sub.add_parser("store-query", help="Local evidence query (no LLM, no API, no Hermes)")
+    p.add_argument("--query", type=str, required=True)
+    p.add_argument("--limit", type=int, default=10)
+    p.add_argument("--date-from", type=str, default=None)
+    p.add_argument("--date-to", type=str, default=None)
+    p.add_argument("--folder-path", type=str, default=None)
+    p.add_argument("--folder-key", type=str, default=None)
+    p.add_argument("--parent-type", type=str, action="append", default=None)
+    p.add_argument("--source-kind", type=str, action="append", default=None)
+    p.add_argument("--no-extracts", action="store_true", default=False, dest="no_extracts")
+    p.add_argument("--no-conversations", action="store_true", default=False, dest="no_conversations")
+    p.add_argument("--include-text", action="store_true", default=False, dest="include_text")
+    p.add_argument("--max-chunk-chars", type=int, default=1200)
+    p.add_argument("--min-score", type=float, default=0.0)
+    p.add_argument("--json", action="store_true", default=False, dest="as_json")
+    p.add_argument("--store-root", type=str, default=None)
+    p.set_defaults(func=cmd_store_query)
 
     # Stub commands
     for cmd_name in [
