@@ -2,7 +2,7 @@
 
 Provides a deterministic, local-only query layer that returns structured
 evidence packs from the SQLite recall index and retrieval chunks.
-No Outlook COM, no LLM, no Hermes, no cloud/API calls.
+No Outlook COM, no LLM, no cloud/API calls.
 """
 
 from __future__ import annotations
@@ -297,7 +297,7 @@ def build_evidence_pack(
     query_text: str = "",
     limit: int = 10,
 ) -> dict[str, Any]:
-    """Build a compact evidence pack suitable for Hermes/Mr Kanban.
+    """Build a compact evidence pack for downstream evidence retrieval.
 
     Self-contained payload with proof-of-provenance for every claim.
     """

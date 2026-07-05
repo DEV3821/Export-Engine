@@ -1,11 +1,11 @@
-"""Mr Kanban guided card evidence session — evidence-bound, no LLM, no write-back.
+"""Guided card evidence session — evidence-bound, no LLM, no write-back.
 
-Produces a structured guided session object that accepts a Kanban card
+Produces a structured guided session object that accepts a card
 context, retrieves evidence from the Local Knowledge Store via the bridge
 layer, and optionally produces a conservative draft human-review note.
 
-No LLM, no Hermes, no Outlook COM at query time, no Kanban write,
-no mailbox write, no answer generation.
+No LLM, no Outlook COM at query time, no mailbox write,
+no answer generation.
 """
 
 from __future__ import annotations
@@ -34,8 +34,8 @@ def run_guided_card_evidence_session(
     via the bridge layer, and returns a structured session object.
 
     If *create_draft_review* is True, a conservative deterministic draft
-    review note is included.  No LLM, no Hermes, no Outlook COM at
-    query time, no Kanban write, no mailbox write.
+    review note is included.  No LLM, no Outlook COM at
+    query time, no mailbox write.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
     session_id = sha256_text(f"guided:{now_iso}:{uuid.uuid4().hex}")
@@ -232,7 +232,7 @@ def _build_draft_review(
 
     parts.append("")
     parts.append("This draft was generated deterministically from local evidence.")
-    parts.append("No LLM, no Hermes, no Outlook COM at query time.")
+    parts.append("No LLM, no Outlook COM at query time.")
 
     text = "\n".join(parts)
 

@@ -407,7 +407,7 @@ def rebuild_derived(
 
 
 def _backup_derived(store_root: str) -> str:
-    """Backup derived store files under .sami_backups with timestamp."""
+    """Backup derived store files under .sami_backups with timestamp (legacy-compatible name)."""
     backup_root = os.path.join(store_root, "vault", ".sami_backups")
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     backup_dir = os.path.join(backup_root, "derived_backup_" + ts)

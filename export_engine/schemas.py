@@ -755,7 +755,7 @@ def new_bridge_request(
     caller: str = "cli",
     mode: str = "free_query",
 ) -> dict[str, Any]:
-    """Bridge request schema for Hermes/Mr Kanban retrieval."""
+    """Bridge request schema for downstream evidence retrieval."""
     return {
         "_schema": "export.bridgeRequest.v1",
         "bridgeRequestId": bridge_request_id,

@@ -1,4 +1,9 @@
-"""Default configuration for the Local Knowledge Store Export Engine."""
+"""Default configuration for the Engine Exporter — Local Mailbox Export Engine.
+
+Store path is currently at the legacy-compatible %LOCALAPPDATA%\\SAMI\\KnowledgeStore
+location.  Path migration to %LOCALAPPDATA%\\EngineExporter\\KnowledgeStore can be
+considered in a future phase with backup/restore tests.
+"""
 
 import getpass
 import os

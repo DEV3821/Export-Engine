@@ -1,4 +1,4 @@
-"""CLI entry point for the Local Knowledge Store Export Engine."""
+"""CLI entry point for the Engine Exporter — Local Mailbox Export Engine."""
 
 from __future__ import annotations
 
@@ -216,7 +216,7 @@ def cmd_store_health(args: argparse.Namespace) -> int:
     dr = report.get("derived", {})
     sa = report.get("safety", {})
     print("=" * 60)
-    print("  Local Knowledge Store — Health Report")
+    print("  Engine Exporter — Health Report")
     print("=" * 60)
     print(f"  Store root: {report.get('storeRoot', '?')}")
     print(f"  NOTE: The repo output folder is not the evidence store.")
@@ -470,7 +470,7 @@ def cmd_store_build_conversations(args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"Error building conversations: {e}")
         return 1
-    print(f"Local Knowledge Store conversations")
+    print(f"Engine Exporter — conversations")
     print(f"Conversations found: {manifest['conversationsFound']}")
     print(f"Records grouped: {manifest['recordsGrouped']}")
     print(f"Mailbox writes: {manifest['mailboxWrites']}")
@@ -488,7 +488,7 @@ def cmd_store_build_retrieval(args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"Error building retrieval chunks: {e}")
         return 1
-    print(f"Local Knowledge Store retrieval chunks")
+    print(f"Engine Exporter — retrieval chunks")
     print(f"Records loaded: {manifest['recordsLoaded']}")
     print(f"Extracts loaded: {manifest['extractsLoaded']}")
     print(f"Conversations loaded: {manifest['conversationsLoaded']}")
@@ -508,7 +508,7 @@ def cmd_store_build_index(args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"Error building index: {e}")
         return 1
-    print(f"Local Knowledge Store SQLite recall index")
+    print(f"Engine Exporter — SQLite recall index")
     print(f"Records indexed: {manifest['recordsIndexed']}")
     print(f"Conversations indexed: {manifest['conversationsIndexed']}")
     print(f"Chunks indexed: {manifest['chunksIndexed']}")
@@ -582,11 +582,11 @@ def cmd_store_query(args: argparse.Namespace) -> int:
         print(json.dumps(qr, indent=2, ensure_ascii=False))
         return 0
 
-    print(f"Local Knowledge Store query")
+    print(f"Engine Exporter — query")
     print(f"Query: {qr['queryText']}")
     print(f"Results: {qr['resultCount']}  Evidence: {qr['evidenceCount']}")
     print()
-    print("Local query only. No Outlook COM, no LLM, no Hermes, no mailbox write, no Kanban write.")
+    print("Local query only. No Outlook COM, no LLM, no mailbox write, no Kanban write.")
     print()
     for r in qr.get("results", []):
         print(f"  {r['rank']}. {r['title']}")
@@ -661,7 +661,7 @@ def cmd_store_audit_offline(args: argparse.Namespace) -> int:
     from .offline import audit_offline
     result = audit_offline()
     print("=" * 60)
-    print("  Local Knowledge Store — Offline Audit")
+    print("  Engine Exporter — Offline Audit")
     print("=" * 60)
     print(f"  Store root: {result.get('storeRoot', '?')}")
     print(f"  Mode: offline (no Outlook COM)")
@@ -712,7 +712,7 @@ def cmd_store_analyse_state(args: argparse.Namespace) -> int:
         print(f"Error: {result['error']}")
         return 1
     print("=" * 60)
-    print("  Local Knowledge Store — State Analysis")
+    print("  Engine Exporter — State Analysis")
     print("=" * 60)
     print(f"  Store root: {result.get('storeRoot', '?')}")
     print(f"  Mode: offline (no Outlook COM)")
@@ -758,7 +758,7 @@ def cmd_store_rebuild_derived(args: argparse.Namespace) -> int:
     """Deterministic rebuild of derived outputs. No Outlook COM."""
     from .offline import rebuild_derived
     print("=" * 60)
-    print("  Local Knowledge Store — Derived Rebuild")
+    print("  Engine Exporter — Derived Rebuild")
     print("=" * 60)
     print("  Mode: offline (no Outlook COM)")
     print("  Safeguards: mailbox write=0, kanban write=0, cloud/API=0, LLM=0")
@@ -796,7 +796,7 @@ def cmd_store_build_vault(args: argparse.Namespace) -> int:
     """Build deterministic vault Markdown notes. No Outlook COM. No LLM."""
     from .vault import build_vault
     print("=" * 60)
-    print("  Local Knowledge Store — Vault Build")
+    print("  Engine Exporter — Vault Build")
     print("=" * 60)
     print("  Mode: offline (no Outlook COM)")
     print("  Safeguards: mailbox write=0, kanban write=0, cloud/API=0, LLM=0")
@@ -825,7 +825,7 @@ def cmd_store_validate(args: argparse.Namespace) -> int:
     """Full offline validation. No Outlook COM."""
     from .offline import validate_offline
     print("=" * 60)
-    print("  Local Knowledge Store — Validation")
+    print("  Engine Exporter — Validation")
     print("=" * 60)
     print("  Mode: offline (no Outlook COM)")
     print()
@@ -875,7 +875,7 @@ def cmd_store_live_status(args: argparse.Namespace) -> int:
     from .live import live_status
     result = live_status()
     print("=" * 60)
-    print("  Local Knowledge Store — Live Status")
+    print("  Engine Exporter — Live Status")
     print("=" * 60)
     print(f"  Live enabled:            {result.get('liveEnabled', False)}")
     print(f"  Last refresh started:    {result.get('lastRefreshStartedAt', '(never)')}")
@@ -893,9 +893,20 @@ def cmd_store_live_status(args: argparse.Namespace) -> int:
     print(f"  Errors last run:         {result.get('errorsLastRun', 0)}")
     print()
     print("  Safety:")
-    print(f"    Mailbox writes: {result.get('mailboxWrites', 0)}")
-    print(f"    Kanban writes:  {result.get('kanbanWrites', 0)}")
-    print(f"    Cloud/API:      {result.get('cloudApiCalls', 0)}")
+    print(f"    Mailbox writes:         {result.get('mailboxWrites', 0)}")
+    print(f"    Kanban writes:          {result.get('kanbanWrites', 0)}")
+    print(f"    Cloud/API calls:        {result.get('cloudApiCalls', 0)}")
+    print(f"    LLM used:               no")
+    print(f"    Outlook COM write:      no (read-only)")
+    print(f"    Raw .msg/.eml retention: no")
+    print(f"    Raw attachment retention: no")
+    print()
+    print(f"  Store path:  {result.get('storeRoot', '?')}")
+    print(f"  Recall DB:   {result.get('recallDbPath', result.get('storeRoot', '?'))}")
+    print(f"  Vault path:  {result.get('vaultPath', result.get('storeRoot', '?'))}")
+    print(f"  Quarantine:  {result.get('quarantinePath', result.get('storeRoot', '?'))}")
+    print()
+    print(f"  Validation status: {result.get('validationStatus', 'not checked')}")
     print("=" * 60)
     return 0
 
@@ -904,7 +915,7 @@ def cmd_store_live_enable(args: argparse.Namespace) -> int:
     """Enable near-live incremental refresh."""
     from .live import live_enable
     print("=" * 60)
-    print("  Local Knowledge Store — Live Enable")
+    print("  Engine Exporter — Live Enable")
     print("=" * 60)
     print("  Validating offline store first...")
     result = live_enable(polling_interval_minutes=args.polling_interval)
@@ -933,7 +944,7 @@ def cmd_store_live_disable(args: argparse.Namespace) -> int:
     from .live import live_disable
     result = live_disable()
     print("=" * 60)
-    print("  Local Knowledge Store — Live Disable")
+    print("  Engine Exporter — Live Disable")
     print("=" * 60)
     print(f"  Live enabled: {result.get('liveEnabled', False)}")
     print("=" * 60)
@@ -944,7 +955,7 @@ def cmd_store_live_refresh_once(args: argparse.Namespace) -> int:
     """Run one incremental refresh cycle. Only command allowed to read Outlook COM."""
     from .live import live_refresh_once
     print("=" * 60)
-    print("  Local Knowledge Store — Live Refresh (once)")
+    print("  Engine Exporter — Live Refresh (once)")
     print("=" * 60)
     print("  Mode: incremental refresh (high-watermark + overlap)")
     print("  Safety: read-only Outlook COM, no mailbox/kanban/cloud writes")
@@ -987,7 +998,7 @@ def cmd_store_live_refresh_once(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="export-engine", description="Local Knowledge Store Export Engine — Phase 1")
+    parser = argparse.ArgumentParser(prog="export-engine", description="Engine Exporter — Local Mailbox Export Engine")
     sub = parser.add_subparsers(dest="command", required=True)
 
     # store-status
@@ -1071,7 +1082,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_store_search)
 
     # store-query
-    p = sub.add_parser("store-query", help="Local evidence query (no LLM, no API, no Hermes)")
+    p = sub.add_parser("store-query", help="Local evidence query (no LLM, no API)")
     p.add_argument("--query", type=str, required=True)
     p.add_argument("--limit", type=int, default=10)
     p.add_argument("--date-from", type=str, default=None)
@@ -1090,7 +1101,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_store_query)
 
     # store-bridge-query
-    p = sub.add_parser("store-bridge-query", help="Bridge evidence retrieval (Hermes integration)")
+    p = sub.add_parser("store-bridge-query", help="Bridge evidence retrieval (downstream integration)")
     p.add_argument("--query", type=str, default=None)
     p.add_argument("--question", type=str, default=None)
     p.add_argument("--card-json", type=str, default=None)

@@ -1,8 +1,8 @@
-"""Hermes/Mr Kanban retrieval bridge — deterministic evidence contract.
+"""Bridge retrieval — deterministic evidence contract.
 
 This module converts card context or free-form queries into structured
 evidence packs from the Local Knowledge Store.  No LLM, no Outlook COM,
-no Kanban write, no answer generation.
+no mailbox write, no answer generation.
 """
 
 from __future__ import annotations
