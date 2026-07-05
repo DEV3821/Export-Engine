@@ -741,3 +741,97 @@ def new_query_result(
             "rawSourcesRetained": 0,
         },
     }
+
+
+# ── Phase 1.8 — Bridge schemas ───────────────────────────────────────────
+
+
+def new_bridge_request(
+    *,
+    bridge_request_id: str = "",
+    query_text: str = "",
+    caller: str = "cli",
+    mode: str = "free_query",
+) -> dict[str, Any]:
+    """Bridge request schema for Hermes/Mr Kanban retrieval."""
+    return {
+        "_schema": "export.bridgeRequest.v1",
+        "bridgeRequestId": bridge_request_id,
+        "createdAt": "",
+        "caller": caller,
+        "mode": mode,
+        "queryText": query_text,
+        "cardContext": {
+            "cardId": "",
+            "cardTitle": "",
+            "cardStatus": "",
+            "cardRisk": "",
+            "cardLead": "",
+            "cardOwner": "",
+            "currentState": "",
+            "nextAction": "",
+            "lastUpdated": "",
+            "sourceCardHash": "",
+        },
+        "retrieval": {
+            "limit": 10,
+            "dateFrom": None,
+            "dateTo": None,
+            "folderPath": None,
+            "folderKey": None,
+            "parentTypes": [],
+            "sourceKinds": [],
+            "includeExtracts": True,
+            "includeConversations": True,
+            "includeChunkText": False,
+            "maxChunkChars": 1200,
+            "minScore": 0.0,
+        },
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "outlookComUsed": False,
+            "llmUsed": False,
+            "answerGenerated": False,
+            "rawSourceRetained": False,
+        },
+    }
+
+
+def new_bridge_evidence_pack(
+    *,
+    bridge_request_id: str = "",
+    query_text: str = "",
+    caller: str = "cli",
+    mode: str = "free_query",
+) -> dict[str, Any]:
+    """Bridge evidence pack schema."""
+    return {
+        "_schema": "export.bridgeEvidencePack.v1",
+        "bridgeRequestId": bridge_request_id,
+        "createdAt": "",
+        "caller": caller,
+        "mode": mode,
+        "queryText": query_text,
+        "cardContext": {},
+        "queryResult": {"resultCount": 0, "evidenceCount": 0},
+        "evidenceItems": [],
+        "evidenceCount": 0,
+        "warnings": [],
+        "errors": [],
+        "recommendedNextStep": {
+            "canAnswerLater": True,
+            "reason": "Answer generation not implemented in this phase",
+            "requiredHumanCheck": True,
+        },
+        "audit": {
+            "mailboxWrites": 0,
+            "kanbanWrites": 0,
+            "cloudApiCalls": 0,
+            "outlookComUsed": False,
+            "llmUsed": False,
+            "answerGenerated": False,
+            "rawSourcesRetained": 0,
+        },
+    }

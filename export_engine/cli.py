@@ -365,6 +365,47 @@ def cmd_store_query(args: argparse.Namespace) -> int:
             print(f"Warning: {w}")
     return 0
 
+def cmd_store_bridge_query(args: argparse.Namespace) -> int:
+    from .bridge import run_bridge_retrieval
+    import json as _json
+    sr = args.store_root or get_store_root()
+    ctx = None
+    if args.card_json_inline:
+        try: ctx = _json.loads(args.card_json_inline)
+        except Exception as e: print(f"JSON error: {e}"); return 1
+    elif args.card_json:
+        try:
+            with open(args.card_json, encoding="utf-8") as f: ctx = _json.load(f)
+        except Exception as e: print(f"File error: {e}"); return 1
+    elif any([args.card_title, args.card_status, args.card_risk,
+              args.card_lead, args.card_owner, args.card_current_state,
+              args.card_next_action, args.card_last_updated]):
+        ctx = {"cardTitle": args.card_title or "", "cardStatus": args.card_status or "",
+               "cardRisk": args.card_risk or "", "cardLead": args.card_lead or "",
+               "cardOwner": args.card_owner or "", "currentState": args.card_current_state or "",
+               "nextAction": args.card_next_action or "", "lastUpdated": args.card_last_updated or "",
+               "sourceCardHash": args.source_card_hash or ""}
+    try:
+        pack = run_bridge_retrieval(card_context=ctx, question=args.question,
+            query_text=args.query, store_root=sr, caller="cli", limit=args.limit,
+            include_chunk_text=args.include_text, max_chunk_chars=args.max_chunk_chars,
+            min_score=args.min_score)
+    except Exception as e: print(f"Bridge error: {e}"); return 1
+    if args.as_json: print(_json.dumps(pack, indent=2, ensure_ascii=False)); return 0
+    print(f"Bridge evidence retrieval")
+    print(f"Caller: {pack['caller']}  Mode: {pack['mode']}")
+    print(f"Query: {pack['queryText']}  Evidence: {pack['evidenceCount']}\n")
+    print("Local bridge only. No Outlook COM, no LLM, no mailbox write, no Kanban write.\n")
+    for i in pack.get("evidenceItems", []):
+        dt = i.get("date","") or "N/A"; fp = i.get("folderPath","") or "N/A"; sk = i.get("sourceKind","")
+        pv = (i.get("textPreview") or "")[:150]
+        print(f"  {i['rank']}. {i['title']}")
+        print(f"     Date: {dt}  Path: {fp}  Kind: {sk}")
+        print(f"     Chunk: {i['chunkKey'][:24]}...  Score: {i['score']}")
+        print(f"     {pv}...\n")
+    for w in pack.get("warnings", []): print(f"Warning: {w}")
+    return 0
+
 def cmd_store_protect(args: argparse.Namespace) -> int:
     print("store-protect: not implemented in this phase")
     return 0
@@ -474,6 +515,29 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", default=False, dest="as_json")
     p.add_argument("--store-root", type=str, default=None)
     p.set_defaults(func=cmd_store_query)
+
+    # store-bridge-query
+    p = sub.add_parser("store-bridge-query", help="Bridge evidence retrieval (Hermes integration)")
+    p.add_argument("--query", type=str, default=None)
+    p.add_argument("--question", type=str, default=None)
+    p.add_argument("--card-json", type=str, default=None)
+    p.add_argument("--card-json-inline", type=str, default=None)
+    p.add_argument("--card-title", type=str, default=None)
+    p.add_argument("--card-status", type=str, default=None)
+    p.add_argument("--card-risk", type=str, default=None)
+    p.add_argument("--card-lead", type=str, default=None)
+    p.add_argument("--card-owner", type=str, default=None)
+    p.add_argument("--card-current-state", type=str, default=None)
+    p.add_argument("--card-next-action", type=str, default=None)
+    p.add_argument("--card-last-updated", type=str, default=None)
+    p.add_argument("--source-card-hash", type=str, default=None)
+    p.add_argument("--limit", type=int, default=10)
+    p.add_argument("--include-text", action="store_true", default=False, dest="include_text")
+    p.add_argument("--max-chunk-chars", type=int, default=1200)
+    p.add_argument("--min-score", type=float, default=0.0)
+    p.add_argument("--json", action="store_true", default=False, dest="as_json")
+    p.add_argument("--store-root", type=str, default=None)
+    p.set_defaults(func=cmd_store_bridge_query)
 
     # Stub commands
     for cmd_name in [
