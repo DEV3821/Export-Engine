@@ -566,3 +566,106 @@ def new_refresh_run(*, run_id: str) -> dict[str, Any]:
         "status": "pending",
         "_safety": _safety_block(),
     }
+
+
+# ── Phase 1.6 — Build schemas ───────────────────────────────────────────
+
+
+def new_conversation_record(
+    *,
+    conversation_key: str = "",
+    export_run_id: str = "",
+    subject_canonical: str = "",
+) -> dict[str, Any]:
+    """Conversation record grouping related messages."""
+    return {
+        "_schema": SCHEMA_VERSION_CONVERSATION,
+        "conversationKey": conversation_key,
+        "exportRunId": export_run_id,
+        "sourceScope": "primary_user_store_only",
+        "createdAt": "",
+        "updatedAt": "",
+        "messageRecordKeys": [],
+        "subjectCanonical": subject_canonical,
+        "participantHashes": [],
+        "folderKeys": [],
+        "dateRange": {"first": "", "last": ""},
+        "messageCount": 0,
+        "attachmentCount": 0,
+        "extractCount": 0,
+        "retrievalChunkIds": [],
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "rawSourceRetained": False,
+        },
+    }
+
+
+def new_retrieval_chunk_record(
+    *,
+    chunk_key: str = "",
+    export_run_id: str = "",
+    parent_type: str = "message",
+    parent_key: str = "",
+) -> dict[str, Any]:
+    """Retrieval chunk for RAG indexing."""
+    return {
+        "_schema": SCHEMA_VERSION_RETRIEVAL_CHUNK,
+        "chunkKey": chunk_key,
+        "exportRunId": export_run_id,
+        "parentType": parent_type,
+        "parentKey": parent_key,
+        "conversationKey": "",
+        "sourceRecordKeys": [],
+        "sourceExtractKeys": [],
+        "chunkOrdinal": 0,
+        "text": "",
+        "textHash": "",
+        "title": "",
+        "date": "",
+        "folderPath": "",
+        "folderKey": "",
+        "participantsHash": "",
+        "evidence": {
+            "recordKey": "",
+            "extractKey": None,
+            "conversationKey": None,
+            "sourcePath": "",
+            "sourceKind": "",
+        },
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "rawSourceRetained": False,
+        },
+    }
+
+
+def new_sqlite_index_run(
+    *,
+    index_run_id: str = "",
+    export_run_id: str = "",
+    sqlite_path: str = "",
+) -> dict[str, Any]:
+    """SQLite recall index run manifest."""
+    return {
+        "_schema": "export.sqliteIndexRun.v1",
+        "indexRunId": index_run_id,
+        "exportRunId": export_run_id,
+        "startedAt": "",
+        "finishedAt": "",
+        "sqlitePath": sqlite_path,
+        "chunksIndexed": 0,
+        "recordsIndexed": 0,
+        "conversationsIndexed": 0,
+        "extractsIndexed": 0,
+        "mailboxWrites": 0,
+        "kanbanWrites": 0,
+        "cloudApiCalls": 0,
+        "rawSourcesRetained": 0,
+        "warnings": [],
+        "errors": [],
+    }

@@ -89,14 +89,9 @@ class TestStubCommands:
     STUB_COMMANDS = [
         "store-refresh",
         "store-watch",
-        "store-search",
-        "store-rebuild-index",
-        "store-build-vault",
-        "store-refresh-vault",
-        "store-build-canvas",
-        "store-refresh-canvas",
-        "store-protect",
-        "store-verify-protection",
+        "store-build-vault", "store-refresh-vault",
+        "store-build-canvas", "store-refresh-canvas",
+        "store-protect", "store-verify-protection",
     ]
 
     def test_stub_commands_in_help(self) -> None:

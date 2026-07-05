@@ -222,6 +222,98 @@ def cmd_store_refresh_canvas(args: argparse.Namespace) -> int:
     print("store-refresh-canvas: not implemented in this phase")
     return 0
 
+# ── Phase 1.6 — Build commands ────────────────────────────────────────
+
+
+def cmd_store_build_conversations(args: argparse.Namespace) -> int:
+    from .conversations import build_conversations
+    store_root = args.store_root or get_store_root()
+    try:
+        manifest = build_conversations(store_root, export_run_id=args.export_run_id or "")
+    except Exception as e:
+        print(f"Error building conversations: {e}")
+        return 1
+    print(f"Local Knowledge Store conversations")
+    print(f"Conversations found: {manifest['conversationsFound']}")
+    print(f"Records grouped: {manifest['recordsGrouped']}")
+    print(f"Mailbox writes: {manifest['mailboxWrites']}")
+    print(f"Kanban writes: {manifest['kanbanWrites']}")
+    print(f"Cloud/API calls: {manifest['cloudApiCalls']}")
+    print(f"Raw source retention: disabled")
+    return 0
+
+
+def cmd_store_build_retrieval(args: argparse.Namespace) -> int:
+    from .retrieval import build_retrieval_chunks
+    store_root = args.store_root or get_store_root()
+    try:
+        manifest = build_retrieval_chunks(store_root, export_run_id=args.export_run_id or "")
+    except Exception as e:
+        print(f"Error building retrieval chunks: {e}")
+        return 1
+    print(f"Local Knowledge Store retrieval chunks")
+    print(f"Records loaded: {manifest['recordsLoaded']}")
+    print(f"Extracts loaded: {manifest['extractsLoaded']}")
+    print(f"Conversations loaded: {manifest['conversationsLoaded']}")
+    print(f"Chunks written: {manifest['chunksWritten']}")
+    print(f"Mailbox writes: {manifest['mailboxWrites']}")
+    print(f"Kanban writes: {manifest['kanbanWrites']}")
+    print(f"Cloud/API calls: {manifest['cloudApiCalls']}")
+    print(f"Raw source retention: disabled")
+    return 0
+
+
+def cmd_store_build_index(args: argparse.Namespace) -> int:
+    from .index import build_index
+    store_root = args.store_root or get_store_root()
+    try:
+        manifest = build_index(store_root, export_run_id=args.export_run_id or "")
+    except Exception as e:
+        print(f"Error building index: {e}")
+        return 1
+    print(f"Local Knowledge Store SQLite recall index")
+    print(f"Records indexed: {manifest['recordsIndexed']}")
+    print(f"Conversations indexed: {manifest['conversationsIndexed']}")
+    print(f"Chunks indexed: {manifest['chunksIndexed']}")
+    print(f"Extracts indexed: {manifest['extractsIndexed']}")
+    print(f"Mailbox writes: {manifest['mailboxWrites']}")
+    print(f"Kanban writes: {manifest['kanbanWrites']}")
+    print(f"Cloud/API calls: {manifest['cloudApiCalls']}")
+    print(f"Raw source retention: disabled")
+    if manifest.get("warnings"):
+        for w in manifest["warnings"]:
+            print(f"Warning: {w}")
+    return 0
+
+
+def cmd_store_search(args: argparse.Namespace) -> int:
+    from .index import search_index
+    store_root = args.store_root or get_store_root()
+    try:
+        results = search_index(args.query, store_root, limit=args.limit, as_json=args.as_json)
+    except Exception as e:
+        print(f"Search error: {e}")
+        return 1
+    if args.as_json:
+        import json
+        print(json.dumps(results, indent=2, ensure_ascii=False))
+        return 0
+    if not results:
+        print("No results found.")
+        return 0
+    print(f"Search results for: {args.query}")
+    print(f"Results: {len(results)}")
+    print()
+    for i, r in enumerate(results[:args.limit], 1):
+        print(f"{i}. {r.get('title', 'No title')}")
+        print(f"   Path: {r.get('folderPath', 'N/A')}  Date: {r.get('date', 'N/A')}")
+        print(f"   Kind: {r.get('sourceKind', r.get('parentType', ''))}")
+        text = r.get('text', '')
+        preview = text[:200].replace('\n', ' ') if text else '(no text)'
+        print(f"   {preview}...")
+        print()
+    return 0
+
 def cmd_store_protect(args: argparse.Namespace) -> int:
     print("store-protect: not implemented in this phase")
     return 0
@@ -287,10 +379,36 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--build-canvas", action="store_true", default=False)
     p.set_defaults(func=cmd_store_ingest)
 
+    # store-build-conversations
+    p = sub.add_parser("store-build-conversations", help="Build conversation groupings from records")
+    p.add_argument("--store-root", type=str, default=None)
+    p.add_argument("--export-run-id", type=str, default=None)
+    p.set_defaults(func=cmd_store_build_conversations)
+
+    # store-build-retrieval
+    p = sub.add_parser("store-build-retrieval", help="Build RAG retrieval chunks from records/extracts/conversations")
+    p.add_argument("--store-root", type=str, default=None)
+    p.add_argument("--export-run-id", type=str, default=None)
+    p.set_defaults(func=cmd_store_build_retrieval)
+
+    # store-build-index
+    p = sub.add_parser("store-build-index", help="Build SQLite recall index from chunks")
+    p.add_argument("--store-root", type=str, default=None)
+    p.add_argument("--export-run-id", type=str, default=None)
+    p.set_defaults(func=cmd_store_build_index)
+
+    # store-search
+    p = sub.add_parser("store-search", help="Local SQLite search (no LLM, no API)")
+    p.add_argument("--query", type=str, required=True)
+    p.add_argument("--limit", type=int, default=10)
+    p.add_argument("--json", action="store_true", default=False, dest="as_json")
+    p.add_argument("--store-root", type=str, default=None)
+    p.set_defaults(func=cmd_store_search)
+
     # Stub commands
     for cmd_name in [
-        "store-refresh", "store-watch", "store-search",
-        "store-rebuild-index", "store-build-vault", "store-refresh-vault",
+        "store-refresh", "store-watch",
+        "store-build-vault", "store-refresh-vault",
         "store-build-canvas", "store-refresh-canvas",
         "store-protect", "store-verify-protection",
     ]:
