@@ -234,11 +234,21 @@ def build_retrieval_chunks(
             for c in chunks:
                 f.write(json.dumps(c, ensure_ascii=False) + "\n")
 
-    # Write chunks_latest.jsonl
+    # Write chunks_latest.jsonl (deduplicated by chunkKey)
+    seen_keys: set[str] = set()
+    deduped_chunks: list[dict] = []
+    for c in all_chunks:
+        k = c.get("chunkKey", "")
+        if k and k not in seen_keys:
+            seen_keys.add(k)
+            deduped_chunks.append(c)
+        elif not k:
+            deduped_chunks.append(c)
+
     latest_path = os.path.join(resolved, "retrieval", "chunks_latest.jsonl")
     with open(latest_path, "w", encoding="utf-8") as f:
-        for c in all_chunks:
+        for c in deduped_chunks:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
 
-    manifest["chunksWritten"] = len(all_chunks)
+    manifest["chunksWritten"] = len(deduped_chunks)
     return manifest

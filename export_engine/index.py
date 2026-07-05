@@ -80,9 +80,17 @@ def build_index(
                 except Exception:
                     pass
 
-    # Create tables
+    # Create tables (clear first for clean rebuild)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=OFF")
+
+    # Drop and recreate for clean deterministic rebuild
+    for tbl in ("records", "conversations", "chunks", "chunk_text"):
+        conn.execute(f"DROP TABLE IF EXISTS \"{tbl}\"")
+    try:
+        conn.execute("DROP TABLE IF EXISTS chunks_fts")
+    except Exception:
+        pass
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS records (

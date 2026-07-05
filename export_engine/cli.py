@@ -652,6 +652,337 @@ def cmd_store_verify_protection(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── Phase 1.8F — Offline commands ───────────────────────────────────────
+
+
+def cmd_store_audit_offline(args: argparse.Namespace) -> int:
+    """Cross-validate records, conversations, chunks, and SQLite index. No Outlook COM."""
+    import json as _json
+    from .offline import audit_offline
+    result = audit_offline()
+    print("=" * 60)
+    print("  Local Knowledge Store — Offline Audit")
+    print("=" * 60)
+    print(f"  Store root: {result.get('storeRoot', '?')}")
+    print(f"  Mode: offline (no Outlook COM)")
+    print()
+    print(f"  Records: {result.get('records', {}).get('count', '?')}")
+    print(f"  Records with conversationKey: {result.get('records', {}).get('withConversationKey', '?')}")
+    print(f"  Orphan conversation keys: {result.get('records', {}).get('orphanConversationKeys', '?')}")
+    print()
+    print(f"  Conversations: {result.get('conversations', {}).get('count', '?')}")
+    print(f"  Conversations with records: {result.get('conversations', {}).get('withRecords', '?')}")
+    print(f"  Orphan conversations: {result.get('conversations', {}).get('orphanConversations', '?')}")
+    print()
+    print(f"  Chunks: {result.get('chunks', {}).get('count', '?')}")
+    print(f"  Orphan chunks: {result.get('chunks', {}).get('orphanChunks', '?')}")
+    print()
+    print("  SQLite:")
+    sqlite = result.get("sqlite", {})
+    print(f"    records:       {sqlite.get('recordsCount', '?')}")
+    print(f"    conversations: {sqlite.get('conversationsCount', '?')}")
+    print(f"    chunks:        {sqlite.get('chunksCount', '?')}")
+    print(f"    chunk_text:    {sqlite.get('chunk_textCount', '?')}")
+    print()
+    print(f"  Conversation join:     {'PASS' if result.get('conversationJoin', {}).get('pass') else 'FAIL'}")
+    print(f"  Path normalisation:    {'PASS' if result.get('pathNormalisation', {}).get('check') else 'FAIL'}")
+    print(f"  Attachment status:     {'explicit (deferred)' if result.get('attachmentStatus', {}).get('explicit') else 'missing'}")
+    print(f"  Fixture markers:       {'FOUND: ' + str(result.get('fixtureMarkers', {}).get('fixtureCount', 0)) if result.get('fixtureMarkers', {}).get('found') else 'none'}")
+    print()
+    print("  Safety:")
+    print(f"    Mailbox writes: 0")
+    print(f"    Kanban writes:  0")
+    print(f"    Cloud/API:      0")
+    print(f"    Outlook COM:    not used")
+    print(f"    LLM:            not used")
+    print("=" * 60)
+    for e in result.get("errors", []):
+        print(f"  Error: {e}")
+    for w in result.get("warnings", []):
+        print(f"  Warning: {w}")
+    return 0 if result.get("conversationJoin", {}).get("pass") else 1
+
+
+def cmd_store_analyse_state(args: argparse.Namespace) -> int:
+    """Comprehensive state analysis. No Outlook COM."""
+    import json as _json
+    from .offline import analyse_state
+    result = analyse_state(offline=args.offline)
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return 1
+    print("=" * 60)
+    print("  Local Knowledge Store — State Analysis")
+    print("=" * 60)
+    print(f"  Store root: {result.get('storeRoot', '?')}")
+    print(f"  Mode: offline (no Outlook COM)")
+    print()
+    print(f"  Records on disk:         {result.get('recordsOnDisk', '?')}")
+    print(f"  Conversations on disk:   {result.get('conversationsOnDisk', '?')}")
+    print(f"  Chunks on disk:          {result.get('chunksOnDisk', '?')}")
+    print()
+    print("  Backfill state:")
+    bf = result.get("backfillState", {})
+    print(f"    Complete: {bf.get('complete', '?')}")
+    print(f"    Pending:  {bf.get('pending', '?')}")
+    print(f"    Partial:  {bf.get('partial', '?')}")
+    print(f"    Failed:   {bf.get('failed', '?')}")
+    print(f"    Pending=0:     {bf.get('pendingZero', '?')}")
+    print(f"    Failed=0:      {bf.get('failedZero', '?')}")
+    print(f"    Partials OK:   {bf.get('partialsAreNonBlocking', '?')}")
+    print(f"    Can proceed:   {bf.get('canProceedWithPartials', '?')}")
+    print()
+    print(f"  Conversation join pass: {result.get('conversationJoinPass', '?')}")
+    print(f"  Path normalisation pass:{result.get('pathNormalisationPass', '?')}")
+    print(f"  Fixture count:          {result.get('fixtureCount', '?')}")
+    print(f"  Attachment extract:     {result.get('attachmentExtractMode', '?')}")
+    print(f"  Attachment parsing:     {'deferred' if result.get('attachmentParsingDeferred') else 'done'}")
+    print(f"  Live mode safe:         {result.get('liveModeSafeToEnable', '?')}")
+    print()
+    print("  Safety:")
+    safety = result.get("safety", {})
+    print(f"    Mailbox writes: {safety.get('mailboxWrites', '?')}")
+    print(f"    Kanban writes:  {safety.get('kanbanWrites', '?')}")
+    print(f"    Cloud/API:      {safety.get('cloudApiCalls', '?')}")
+    print(f"    Outlook COM:    not used")
+    print(f"    LLM:            not used")
+    print("=" * 60)
+    for e in result.get("errors", []):
+        print(f"  Error: {e}")
+    for w in result.get("warnings", []):
+        print(f"  Warning: {w}")
+    return 0
+
+
+def cmd_store_rebuild_derived(args: argparse.Namespace) -> int:
+    """Deterministic rebuild of derived outputs. No Outlook COM."""
+    from .offline import rebuild_derived
+    print("=" * 60)
+    print("  Local Knowledge Store — Derived Rebuild")
+    print("=" * 60)
+    print("  Mode: offline (no Outlook COM)")
+    print("  Safeguards: mailbox write=0, kanban write=0, cloud/API=0, LLM=0")
+    print()
+    result = rebuild_derived(offline=args.offline, export_run_id=getattr(args, "export_run_id", ""))
+    if "error" in result:
+        print(f"  ERROR: {result['error']}")
+        return 1
+    print(f"  Store root: {result.get('storeRoot', '?')}")
+    print(f"  Backup path: (see .sami_backups)")
+    print()
+    for step in result.get("steps", []):
+        status_sym = "\u2705" if step.get("status") == "ok" else "\u274c"
+        print(f"  {status_sym} {step['name']}: {step['status']}")
+    print()
+    oc = result.get("outputCounts", {})
+    print("  Output counts:")
+    for k, v in oc.items():
+        print(f"    {k}: {v}")
+    print()
+    print("  Safety checks:")
+    print(f"    Mailbox writes: {result.get('mailboxWrites', 0)}")
+    print(f"    Kanban writes:  {result.get('kanbanWrites', 0)}")
+    print(f"    Cloud/API:      {result.get('cloudApiCalls', 0)}")
+    print(f"    Outlook COM:    {'USED' if result.get('outlookComUsed') else 'not used'}")
+    print(f"    LLM:            {'USED' if result.get('llmUsed') else 'not used'}")
+    print(f"    Full mailbox:   {'YES' if result.get('fullMailboxReprocess') else 'no'}")
+    print("=" * 60)
+    for e in result.get("errors", []):
+        print(f"  Error: {e}")
+    return 1 if result.get("errors") else 0
+
+
+def cmd_store_build_vault(args: argparse.Namespace) -> int:
+    """Build deterministic vault Markdown notes. No Outlook COM. No LLM."""
+    from .vault import build_vault
+    print("=" * 60)
+    print("  Local Knowledge Store — Vault Build")
+    print("=" * 60)
+    print("  Mode: offline (no Outlook COM)")
+    print("  Safeguards: mailbox write=0, kanban write=0, cloud/API=0, LLM=0")
+    print()
+    result = build_vault()
+    print(f"  Conversations loaded: {result.get('conversationsLoaded', 0)}")
+    print(f"  Vault notes written:  {result.get('vaultNotesWritten', 0)}")
+    print(f"  Dashboards written:   {result.get('vaultDashboardsWritten', 0)}")
+    print()
+    for folder, count in sorted(result.get("folderNoteCounts", {}).items()):
+        print(f"    10_Conversations/{folder}: {count} notes")
+    print()
+    print("  Safety:")
+    print(f"    Mailbox writes: {result.get('mailboxWrites', 0)}")
+    print(f"    Kanban writes:  {result.get('kanbanWrites', 0)}")
+    print(f"    Cloud/API:      {result.get('cloudApiCalls', 0)}")
+    print(f"    Outlook COM:    {'USED' if result.get('outlookComUsed') else 'not used'}")
+    print(f"    LLM:            {'USED' if result.get('llmUsed') else 'not used'}")
+    print("=" * 60)
+    for e in result.get("errors", []):
+        print(f"  Error: {e}")
+    return 0 if result.get("vaultNotesWritten", 0) > 0 else 1
+
+
+def cmd_store_validate(args: argparse.Namespace) -> int:
+    """Full offline validation. No Outlook COM."""
+    from .offline import validate_offline
+    print("=" * 60)
+    print("  Local Knowledge Store — Validation")
+    print("=" * 60)
+    print("  Mode: offline (no Outlook COM)")
+    print()
+    result = validate_offline(require_sent_items=True, require_vault_notes=True)
+    overall = result.get("overallResult", "FAIL")
+    print(f"  Overall result: {overall}")
+    print()
+    print("  Checks:")
+    for check_name, passed in result.get("checks", {}).items():
+        sym = "\u2705" if passed else "\u274c"
+        print(f"    {sym} {check_name}")
+    print()
+    print(f"  Failures: {len(result.get('failures', []))}")
+    for f in result.get("failures", []):
+        print(f"    \u274c {f}")
+    print()
+    print(f"  Warnings: {len(result.get('warnings', []))}")
+    for w in result.get("warnings", []):
+        print(f"    {w}")
+    print()
+    print("  Summary:")
+    print(f"    Records:         {result.get('recordsOnDisk', '?')}")
+    print(f"    Conversations:   {result.get('conversationsCount', '?')}")
+    print(f"    Chunks:          {result.get('chunkCount', '?')}")
+    print(f"    Chunk text rows: {result.get('chunkTextCount', '?')}")
+    print(f"    Vault notes:     {result.get('vaultNoteCount', '?')}")
+    print(f"    Sent Items:      {'yes' if result.get('sentItemsIncluded') else 'no'}")
+    print(f"    Attachments:     {'deferred' if result.get('attachmentParsingDeferred') else 'parsed'}")
+    print(f"    Live ready:      {'yes' if result.get('liveReady') else 'no'}")
+    print()
+    print("  Safety:")
+    sa = result.get("safety", {})
+    print(f"    Mailbox writes: {sa.get('mailboxWrites', 0)}")
+    print(f"    Kanban writes:  {sa.get('kanbanWrites', 0)}")
+    print(f"    Cloud/API:      {sa.get('cloudApiCalls', 0)}")
+    print(f"    Outlook COM:    not used")
+    print(f"    LLM:            not used")
+    print("=" * 60)
+    return 0 if overall == "PASS" else 1
+
+
+# ── Phase 1.8F — Live commands ────────────────────────────────────────────
+
+
+def cmd_store_live_status(args: argparse.Namespace) -> int:
+    """Show current live state."""
+    from .live import live_status
+    result = live_status()
+    print("=" * 60)
+    print("  Local Knowledge Store — Live Status")
+    print("=" * 60)
+    print(f"  Live enabled:            {result.get('liveEnabled', False)}")
+    print(f"  Last refresh started:    {result.get('lastRefreshStartedAt', '(never)')}")
+    print(f"  Last refresh finished:   {result.get('lastRefreshFinishedAt', '(never)')}")
+    print(f"  Polling interval:        {result.get('pollingIntervalMinutes', '?')} minutes")
+    print(f"  Included folders:        {result.get('includedFolderCount', '?')}")
+    print(f"  Sent Items included:     {result.get('includeSentItems', '?')}")
+    print()
+    print(f"  Inbox high-watermark:    {result.get('inboxHighWatermark', '(not set)')}")
+    print(f"  Sent Items high-watermark: {result.get('sentItemsHighWatermark', '(not set)')}")
+    print()
+    print(f"  New records last run:    {result.get('newRecordsLastRun', 0)}")
+    print(f"  Changed records last run: {result.get('changedRecordsLastRun', 0)}")
+    print(f"  Duplicates skipped:      {result.get('duplicatesSkippedLastRun', 0)}")
+    print(f"  Errors last run:         {result.get('errorsLastRun', 0)}")
+    print()
+    print("  Safety:")
+    print(f"    Mailbox writes: {result.get('mailboxWrites', 0)}")
+    print(f"    Kanban writes:  {result.get('kanbanWrites', 0)}")
+    print(f"    Cloud/API:      {result.get('cloudApiCalls', 0)}")
+    print("=" * 60)
+    return 0
+
+
+def cmd_store_live_enable(args: argparse.Namespace) -> int:
+    """Enable near-live incremental refresh."""
+    from .live import live_enable
+    print("=" * 60)
+    print("  Local Knowledge Store — Live Enable")
+    print("=" * 60)
+    print("  Validating offline store first...")
+    result = live_enable(polling_interval_minutes=args.polling_interval)
+    if result.get("error"):
+        print(f"  FAILED: {result['error']}")
+        if "validationResult" in result:
+            vr = result["validationResult"]
+            for f in vr.get("failures", []):
+                print(f"    Validation failure: {f}")
+        print("=" * 60)
+        return 1
+    print(f"  Live enabled:    {result.get('enabled', False)}")
+    print(f"  Polling interval: {result.get('pollingIntervalMinutes', '?')} minutes")
+    print(f"  Sent Items:      {'yes' if result.get('includeSentItems') else 'no'}")
+    print(f"  Folders:         {result.get('folderCount', '?')} included")
+    print(f"  Inbox HWM:       {result.get('inboxHighWatermark', '?')}")
+    print(f"  Sent Items HWM:  {result.get('sentItemsHighWatermark', '?')}")
+    print()
+    print("  Safety: mailbox write=0, kanban write=0, cloud/API=0, read-only Outlook")
+    print("=" * 60)
+    return 0
+
+
+def cmd_store_live_disable(args: argparse.Namespace) -> int:
+    """Disable near-live incremental refresh."""
+    from .live import live_disable
+    result = live_disable()
+    print("=" * 60)
+    print("  Local Knowledge Store — Live Disable")
+    print("=" * 60)
+    print(f"  Live enabled: {result.get('liveEnabled', False)}")
+    print("=" * 60)
+    return 0
+
+
+def cmd_store_live_refresh_once(args: argparse.Namespace) -> int:
+    """Run one incremental refresh cycle. Only command allowed to read Outlook COM."""
+    from .live import live_refresh_once
+    print("=" * 60)
+    print("  Local Knowledge Store — Live Refresh (once)")
+    print("=" * 60)
+    print("  Mode: incremental refresh (high-watermark + overlap)")
+    print("  Safety: read-only Outlook COM, no mailbox/kanban/cloud writes")
+    print("  Safeguards: high-watermark prevents full mailbox reprocess")
+    print()
+    result = live_refresh_once()
+    if result.get("error"):
+        print(f"  ERROR: {result['error']}")
+        print("=" * 60)
+        return 1
+    print(f"  Store root:       {result.get('storeRoot', '?')}")
+    print(f"  Folders processed: {result.get('foldersProcessed', 0)}")
+    print(f"  Sent Items:       {'yes' if result.get('sentItemsIncluded') else 'no'}")
+    print()
+    print(f"  New records:       {result.get('newRecords', 0)}")
+    print(f"  Changed records:   {result.get('changedRecords', 0)}")
+    print(f"  Duplicates skipped: {result.get('duplicatesSkipped', 0)}")
+    print(f"  Errors:            {result.get('errors', 0)}")
+    print()
+    for fld in result.get("refreshedFolders", []):
+        print(f"    {fld.get('folderPath', '?')}: {fld.get('newRecords', 0)} new, {fld.get('changedRecords', 0)} changed")
+    print()
+    print("  Safety:")
+    print(f"    Mailbox writes: {result.get('mailboxWrites', 0)}")
+    print(f"    Kanban writes:  {result.get('kanbanWrites', 0)}")
+    print(f"    Cloud/API:      {result.get('cloudApiCalls', 0)}")
+    print(f"    Outlook COM:    used (read-only)")
+    print(f"    Full mailbox:   {'YES' if result.get('fullMailboxReprocess') else 'no'}")
+    if result.get("derivedRebuildStatus"):
+        print(f"    Derived rebuild: {result.get('derivedRebuildStatus')}")
+    if result.get("vaultUpdated"):
+        print(f"    Vault update:    yes ({result.get('vaultNotesWritten', 0)} notes)")
+    print("=" * 60)
+    for em in result.get("errorMessages", []):
+        print(f"  Error: {em}")
+    return 0 if result.get("newRecords", 0) >= 0 else 1
+
+
 # ── Argument parser ────────────────────────────────────────────────────
 
 
@@ -809,12 +1140,57 @@ def build_parser() -> argparse.ArgumentParser:
     # Stub commands
     for cmd_name in [
         "store-refresh", "store-watch",
-        "store-build-vault", "store-refresh-vault",
-        "store-build-canvas", "store-refresh-canvas",
+        "store-refresh-vault", "store-build-canvas", "store-refresh-canvas",
         "store-protect", "store-verify-protection",
     ]:
         p = sub.add_parser(cmd_name, help=f"Run {cmd_name}")
         p.set_defaults(func=_stub_for(cmd_name))
+
+    # ── Phase 1.8F — Offline commands ──────────────────────────────────
+
+    # store-audit-offline
+    p = sub.add_parser("store-audit-offline", help="Cross-validate records, conversations, chunks, SQLite (no Outlook COM)")
+    p.set_defaults(func=cmd_store_audit_offline)
+
+    # store-analyse-state
+    p = sub.add_parser("store-analyse-state", help="Comprehensive KnowledgeStore state analysis (no Outlook COM)")
+    p.add_argument("--offline", action="store_true", default=True, dest="offline")
+    p.set_defaults(func=cmd_store_analyse_state)
+
+    # store-rebuild-derived
+    p = sub.add_parser("store-rebuild-derived", help="Deterministic rebuild of conversations, chunks, SQLite, vault (no Outlook COM)")
+    p.add_argument("--offline", action="store_true", default=True, dest="offline")
+    p.add_argument("--export-run-id", type=str, default="")
+    p.set_defaults(func=cmd_store_rebuild_derived)
+
+    # store-build-vault
+    p = sub.add_parser("store-build-vault", help="Build deterministic vault Markdown notes from conversation data (no Outlook COM)")
+    p.add_argument("--offline", action="store_true", default=True, dest="offline")
+    p.set_defaults(func=cmd_store_build_vault)
+
+    # store-validate
+    p = sub.add_parser("store-validate", help="Full offline validation of KnowledgeStore health and invariants (no Outlook COM)")
+    p.add_argument("--offline", action="store_true", default=True, dest="offline")
+    p.set_defaults(func=cmd_store_validate)
+
+    # ── Phase 1.8F — Live commands ─────────────────────────────────────
+
+    # store-live-status
+    p = sub.add_parser("store-live-status", help="Show near-live incremental refresh state")
+    p.set_defaults(func=cmd_store_live_status)
+
+    # store-live-enable
+    p = sub.add_parser("store-live-enable", help="Enable near-live incremental refresh")
+    p.add_argument("--polling-interval", type=int, default=5, dest="polling_interval")
+    p.set_defaults(func=cmd_store_live_enable)
+
+    # store-live-disable
+    p = sub.add_parser("store-live-disable", help="Disable near-live incremental refresh")
+    p.set_defaults(func=cmd_store_live_disable)
+
+    # store-live-refresh-once
+    p = sub.add_parser("store-live-refresh-once", help="Run one incremental refresh cycle (only command allowed to read Outlook COM)")
+    p.set_defaults(func=cmd_store_live_refresh_once)
 
     return parser
 

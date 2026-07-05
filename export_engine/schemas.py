@@ -30,6 +30,8 @@ SCHEMA_VERSION_CONVERSATION = "export.conversation.v1"
 SCHEMA_VERSION_RETRIEVAL_CHUNK = "export.retrievalChunk.v1"
 SCHEMA_VERSION_INGEST_RUN = "export.ingestRun.v1"
 SCHEMA_VERSION_REFRESH_RUN = "export.refreshRun.v1"
+SCHEMA_VERSION_VAULT_NOTE = "export.vaultNote.v1"
+SCHEMA_VERSION_LIVE_STATE = "export.liveState.v1"
 
 
 # ── Factory functions ──────────────────────────────────────────────────
@@ -834,4 +836,81 @@ def new_bridge_evidence_pack(
             "answerGenerated": False,
             "rawSourcesRetained": 0,
         },
+    }
+
+
+# ── Phase 1.8 — Vault note schema ─────────────────────────────────────────
+
+
+def new_vault_note(
+    *,
+    note_key: str = "",
+    note_type: str = "conversation",
+    conversation_key: str = "",
+) -> dict[str, Any]:
+    """Vault Markdown note schema for deterministic conversation notes."""
+    return {
+        "_schema": SCHEMA_VERSION_VAULT_NOTE,
+        "noteKey": note_key,
+        "noteType": note_type,
+        "conversationKey": conversation_key,
+        "sourceRecordKeys": [],
+        "dateFirst": "",
+        "dateLast": "",
+        "folderPaths": [],
+        "source": "outlook_primary_store_export",
+        "offlineRefineOnly": True,
+        "mailboxWrite": False,
+        "kanbanWrite": False,
+        "cloudApiCalls": False,
+        "llmUsed": False,
+        "dateRange": {"first": "", "last": ""},
+        "messageCount": 0,
+        "evidenceChunkCount": 0,
+        "attachmentStatus": "deferred",
+        "validationStatus": "passed",
+        "safeBodyPreview": "",
+        "sourceRecordKeysList": [],
+        "chunkIdList": [],
+        "audit": {
+            "mailboxWrite": False,
+            "kanbanWrite": False,
+            "cloudApiCalls": False,
+            "rawSourceRetained": False,
+        },
+    }
+
+
+# ── Phase 1.8 — Live state schema ─────────────────────────────────────────
+
+
+def new_live_state(
+    *,
+    live_enabled: bool = False,
+) -> dict[str, Any]:
+    """Live incremental refresh state document."""
+    return {
+        "_schema": SCHEMA_VERSION_LIVE_STATE,
+        "liveEnabled": live_enabled,
+        "lastRefreshStartedAt": "",
+        "lastRefreshFinishedAt": "",
+        "pollingIntervalMinutes": 5,
+        "pollingEnabled": live_enabled,
+        "includedFolderCount": 0,
+        "includeSentItems": True,
+        "folders": {},
+        "highWatermarks": {},
+        "inboxHighWatermark": "",
+        "sentItemsHighWatermark": "",
+        "newRecordsLastRun": 0,
+        "changedRecordsLastRun": 0,
+        "duplicatesSkippedLastRun": 0,
+        "errorsLastRun": 0,
+        "mailboxWrites": 0,
+        "kanbanWrites": 0,
+        "cloudApiCalls": 0,
+        "rawSourcesRetained": 0,
+        "outlookComUsed": False,
+        "warnings": [],
+        "errors": [],
     }
