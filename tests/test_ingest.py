@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 
-from export_engine.ingest import run_ingest, _make_fixture_records, _write_record
+from export_engine.ingest import run_ingest, _make_fixture_records, _write_record, _get_split_subchunks
 
 
 def _setup_store(store_root: str) -> dict:
@@ -125,8 +125,8 @@ class TestDedupe:
             m1 = run_ingest(store_root, use_fixture=True, limit=3, resume=True)
             assert m1["recordsExported"] == 3
 
-            # Second run — same records, should be duplicates
-            m2 = run_ingest(store_root, use_fixture=True, limit=3, resume=True)
+            # Second run — same records, chunks now complete from checkpointing
+            m2 = run_ingest(store_root, use_fixture=True, limit=3, resume=False)
             assert m2["recordsSkippedDuplicate"] > 0, f"Expected duplicates, got {m2}"
 
     def test_content_hash_stable(self) -> None:
@@ -160,3 +160,55 @@ class TestChunkState:
             manifest = run_ingest(store_root, use_fixture=True, limit=5, resume=True)
             for field in ("recordsExported", "recordsChanged", "recordsSkippedDuplicate", "chunksAttempted"):
                 assert manifest[field] >= 0, f"{field} is negative: {manifest[field]}"
+
+
+class TestDenseChunkSplitting:
+    """Tests for adaptive dense-chunk splitting."""
+
+    def test_split_subchunks_created(self) -> None:
+        chunk = {
+            "chunkId": "parent123",
+            "folderKey": "fk1",
+            "folderPath": "\\Inbox",
+            "displayName": "Inbox",
+            "defaultRole": "inbox",
+            "since": "2026-07-01",
+            "until": "2026-07-05",
+        }
+        subs = _get_split_subchunks(chunk, 1000, 500, 1)
+        assert len(subs) >= 2, f"Expected at least 2 sub-chunks, got {len(subs)}"
+        for s in subs:
+            assert s.get("_is_split_subchunk") is True
+            assert s.get("_parentChunkId") == "parent123"
+            assert s.get("since"), "Sub-chunk must have 'since'"
+            assert s.get("until"), "Sub-chunk must have 'until'"
+            assert s.get("chunkId") != "parent123", "Sub-chunk must have unique ID"
+
+    def test_split_small_chunk_no_split(self) -> None:
+        chunk = {
+            "chunkId": "small",
+            "folderKey": "fk1",
+            "folderPath": "\\Inbox",
+            "displayName": "Inbox",
+            "since": "2026-07-01",
+            "until": "2026-07-01",
+        }
+        # A single-day chunk with 400 items, max 500 — should not split
+        subs = _get_split_subchunks(chunk, 400, 500, 1)
+        assert len(subs) == 1
+        assert subs[0]["chunkId"] == "small"
+
+    def test_split_subchunks_have_date_order(self) -> None:
+        chunk = {
+            "chunkId": "parent",
+            "folderKey": "fk1",
+            "folderPath": "\\Inbox",
+            "displayName": "Inbox",
+            "since": "2026-07-01",
+            "until": "2026-07-10",
+        }
+        subs = _get_split_subchunks(chunk, 2000, 500, 1)
+        assert len(subs) >= 3
+        dates = [(s["since"], s["until"]) for s in subs]
+        for i in range(len(dates) - 1):
+            assert dates[i][1] <= dates[i + 1][0], f"Sub-chunks out of order: {dates}"

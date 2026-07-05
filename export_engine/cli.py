@@ -133,6 +133,8 @@ def cmd_store_ingest(args: argparse.Namespace) -> int:
         print("Warning: Retrieval, index, vault, and canvas projection are reserved for later phases.\n")
 
     parse_extracts = getattr(args, "parse_extracts", False)
+    reparse_dups = getattr(args, "reparse_duplicate_attachments", False)
+    att_timeout = getattr(args, "attachment_timeout_seconds", 30)
 
     try:
         manifest = run_ingest(
@@ -145,6 +147,11 @@ def cmd_store_ingest(args: argparse.Namespace) -> int:
             max_chunks=args.max_chunks,
             chunk_id=args.chunk_id,
             parse_extracts=parse_extracts,
+            reparse_duplicate_attachments=reparse_dups,
+            attachment_timeout_seconds=att_timeout,
+            max_items_per_chunk=getattr(args, "max_items_per_chunk", 500),
+            min_chunk_days=getattr(args, "min_chunk_days", 1),
+            item_progress_every=getattr(args, "item_progress_every", 25),
         )
     except (FileNotFoundError, ValueError) as e:
         print(str(e))
@@ -190,8 +197,238 @@ def cmd_store_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_store_refresh(args: argparse.Namespace) -> int:
-    print("store-refresh: not implemented in this phase")
+def cmd_store_health(args: argparse.Namespace) -> int:
+    """Print comprehensive store health report. Read-only, no Outlook COM."""
+    from .health import run_store_health
+    import json as _json
+    sr = args.store_root or get_store_root()
+    try:
+        report = run_store_health(store_root=sr)
+    except Exception as e:
+        print(f"Health report error: {e}")
+        return 1
+    if args.as_json:
+        print(_json.dumps(report, indent=2, ensure_ascii=False))
+        return 0
+    # Print human-readable summary
+    src = report.get("source", {})
+    bf = report.get("backfill", {})
+    dr = report.get("derived", {})
+    sa = report.get("safety", {})
+    print("=" * 60)
+    print("  Local Knowledge Store — Health Report")
+    print("=" * 60)
+    print(f"  Store root: {report.get('storeRoot', '?')}")
+    print(f"  NOTE: The repo output folder is not the evidence store.")
+    print(f"  The evidence store is under AppData KnowledgeStore.")
+    print()
+    print(f"  Records path:      {os.path.join(report.get('storeRoot', ''), 'records')}")
+    print(f"  Extracts path:     {os.path.join(report.get('storeRoot', ''), 'extracts')}")
+    print(f"  Conversations path: {os.path.join(report.get('storeRoot', ''), 'conversations')}")
+    print(f"  Retrieval path:    {os.path.join(report.get('storeRoot', ''), 'retrieval')}")
+    print(f"  Index path:        {os.path.join(report.get('storeRoot', ''), 'index')}")
+    print()
+    print("  Source / catalog:")
+    print(f"    Source folders seen: {src.get('sourceFoldersSeen', '?')}")
+    print(f"    Folders included:    {src.get('foldersIncluded', '?')}")
+    print(f"    Folders excluded:    {src.get('foldersExcluded', '?')}")
+    print(f"    Excluded stores:     {src.get('excludedStores', '?')}")
+    print(f"    Primary store:       {src.get('storeDisplayName', '?')}")
+    print(f"    Source scope:        {src.get('sourceScope', '?')}")
+    print()
+    print("  Backfill / ingest:")
+    print(f"    Chunks total:       {bf.get('chunksTotal', '?')}")
+    print(f"    Chunks pending:     {bf.get('chunksPending', '?')}")
+    print(f"    Chunks complete:    {bf.get('chunksComplete', '?')}")
+    print(f"    Chunks partial:     {bf.get('chunksPartial', '?')}")
+    print(f"    Chunks failed:      {bf.get('chunksFailed', '?')}")
+    print(f"    Records seen:       {bf.get('recordsSeen', '?')}")
+    print(f"    Records exported:   {bf.get('recordsExported', '?')}")
+    print(f"    Duplicates skipped: {bf.get('recordsSkippedDuplicate', '?')}")
+    print(f"    Non-mail skipped:   {bf.get('nonMailItemsSkipped', '?')}")
+    print(f"    Attachments seen:   {bf.get('attachmentsSeen', '?')}")
+    print(f"    Extracts parsed:    {bf.get('extractsParsed', '?')}")
+    print(f"    Extracts metadata:  {bf.get('extractsMetadataOnly', '?')}")
+    print(f"    Extracts failed:    {bf.get('extractsFailed', '?')}")
+    print(f"    Record JSON files:  {bf.get('recordJsonFilesCount', '?')}")
+    print()
+    print("  Derived store:")
+    print(f"    Extract JSON files:           {dr.get('extractJsonFilesCount', '?')}")
+    print(f"    Conversation JSON files:      {dr.get('conversationJsonFilesCount', '?')}")
+    print(f"    Conversations latest lines:   {dr.get('conversationsLatestLines', '?')}")
+    print(f"    Retrieval chunks latest lines: {dr.get('retrievalChunksLatestLines', '?')}")
+    print(f"    recall.sqlite exists:         {dr.get('recallSqliteExists', '?')}")
+    print(f"    Records indexed:              {dr.get('recordsIndexed', '?')}")
+    print(f"    Conversations indexed:        {dr.get('conversationsIndexed', '?')}")
+    print(f"    Chunks indexed:               {dr.get('chunksIndexed', '?')}")
+    print()
+    print("  Safety:")
+    print(f"    Mailbox writes:     {sa.get('mailboxWrites', '?')}")
+    print(f"    Kanban writes:      {sa.get('kanbanWrites', '?')}")
+    print(f"    Cloud/API calls:    {sa.get('cloudApiCalls', '?')}")
+    print(f"    Raw messages:       {sa.get('rawMessagesStored', '?')}")
+    print(f"    Raw attachments:    {sa.get('rawAttachmentsSaved', '?')}")
+    print(f"    Raw sources:        {sa.get('rawSourcesRetained', '?')}")
+    print(f"    .msg files found:   {sa.get('msgFilesFound', '?')}")
+    print(f"    .eml files found:   {sa.get('emlFilesFound', '?')}")
+    print(f"    Temp/parsing files: {sa.get('tempParsingFiles', '?')}")
+    print(f"    Suspicious binaries:{sa.get('suspiciousBinaryFiles', '?')}")
+    print(f"    All checks pass:    {sa.get('allSafetyChecksPass', '?')}")
+    print("=" * 60)
+    for w in report.get("warnings", []):
+        print(f"  Warning: {w}")
+    for e in report.get("errors", []):
+        print(f"  Error: {e}")
+    return 0
+
+
+def cmd_store_export_run(args: argparse.Namespace) -> int:
+    """Run the chunked export pipeline with visible terminal progress.
+
+    Runs store-ingest in batches until chunksPending is 0,
+    or until a real error occurs, or --once is set.
+    """
+    from .ingest import run_ingest
+    import json as _json
+    sr = args.store_root or get_store_root()
+    batch_size = getattr(args, "batch_size", 25)
+    stop_on_error = getattr(args, "stop_on_error", False)
+    once = getattr(args, "once", False)
+    refresh_source = getattr(args, "refresh_source", False)
+    parse_extracts = getattr(args, "parse_extracts", True)
+    reparse_dups = getattr(args, "reparse_duplicate_attachments", False)
+    att_timeout = getattr(args, "attachment_timeout_seconds", 30)
+    until = getattr(args, "until", None)
+    since = getattr(args, "since", None)
+    resume = getattr(args, "resume", False)
+
+    # If --refresh-source or no plan, run source scan and plan
+    if refresh_source:
+        from .source_scan import run_source_scan
+        from .outlook_com_source import outlook_available
+        print()
+        print("=" * 60)
+        print("  [store-export-run] Running source scan...")
+        print("=" * 60)
+        if not outlook_available():
+            print("Outlook COM unavailable.")
+            return 1
+        catalog = run_source_scan(sr)
+        included = sum(1 for f in catalog["folders"] if f.get("included"))
+        print(f"  Source scan: {len(catalog['folders'])} folders seen, {included} included")
+        print(f"  Store: {catalog.get('storeDisplayName', '?')}")
+
+    # Check if plan exists
+    plan_path = os.path.join(sr, "runs", "ingest_plan_latest.json")
+    if not os.path.isfile(plan_path) or refresh_source:
+        from .planning import create_backfill_plan
+        print()
+        print("=" * 60)
+        print("  [store-export-run] Creating ingest plan...")
+        print("=" * 60)
+        plan = create_backfill_plan(
+            sr,
+            since=since or "2025-07-05",
+            until=until or "2026-07-05",
+        )
+        print(f"  Plan: {len(plan['folders'])} folders, {len(plan['chunks'])} chunks")
+        if args.since or args.until:
+            print(f"  Date range: {plan.get('since', '?')} to {plan.get('until', '?')}")
+
+    batch_num = 0
+    total_pending_before = None
+
+    while True:
+        batch_num += 1
+        print()
+        print("=" * 60)
+        print(f"  [store-export-run] Batch {batch_num} — max {batch_size} chunks")
+        print("=" * 60)
+
+        try:
+            manifest = run_ingest(
+                sr,
+                resume=resume or True,
+                max_chunks=batch_size,
+                parse_extracts=parse_extracts,
+                reparse_duplicate_attachments=reparse_dups,
+                attachment_timeout_seconds=att_timeout,
+                max_items_per_chunk=getattr(args, "max_items_per_chunk", 500),
+                min_chunk_days=getattr(args, "min_chunk_days", 1),
+                item_progress_every=getattr(args, "item_progress_every", 25),
+            )
+        except (FileNotFoundError, ValueError) as e:
+            print(f"  ERROR: {e}")
+            if stop_on_error:
+                return 1
+            break
+        except Exception as e:
+            print(f"  UNEXPECTED ERROR: {e}")
+            if stop_on_error:
+                return 1
+            break
+
+        # Print batch summary
+        print()
+        print("-" * 60)
+        print(f"  Batch {batch_num} complete:")
+        print(f"    Chunks attempted: {manifest.get('chunksAttempted', 0)}")
+        print(f"    Chunks completed: {manifest.get('chunksCompleted', 0)}")
+        print(f"    Chunks partial:   {manifest.get('chunksPartial', 0)}")
+        print(f"    Chunks failed:    {manifest.get('chunksFailed', 0)}")
+        print(f"    Records seen:     {manifest.get('recordsSeen', 0)}")
+        print(f"    Records exported: {manifest.get('recordsExported', 0)}")
+        print(f"    Duplicates skipped: {manifest.get('recordsSkippedDuplicate', 0)}")
+        print(f"    Extracts seen:    {manifest.get('extractsSeen', 0)}")
+        if manifest.get("errors"):
+            for e in manifest["errors"]:
+                print(f"    Error: {e}")
+        print("-" * 60)
+
+        # Check if more chunks remain
+        try:
+            from .health import run_store_health
+            health = run_store_health(store_root=sr)
+            pending = health.get("backfill", {}).get("chunksPending", 0)
+            complete = health.get("backfill", {}).get("chunksComplete", 0)
+            failed = health.get("backfill", {}).get("chunksFailed", 0)
+            partial = health.get("backfill", {}).get("chunksPartial", 0)
+            total = health.get("backfill", {}).get("chunksTotal", 0)
+            print(f"  State: {pending} pending / {complete} complete / {partial} partial / {failed} failed / {total} total")
+
+            if total_pending_before is not None and pending == total_pending_before:
+                print()
+                print("  WARNING: chunksPending has not changed — possible issue or no new chunks to process.")
+                if stop_on_error:
+                    return 1
+                break
+
+            total_pending_before = pending
+
+            if pending == 0:
+                print()
+                print("=" * 60)
+                print("  All backfill chunks complete!")
+                print("=" * 60)
+                break
+
+            if once:
+                print()
+                print("  --once: stopping after this batch.")
+                break
+
+        except Exception as he:
+            print(f"  Health check error: {he}")
+            if stop_on_error:
+                return 1
+            break
+
+        # Print run manifest path
+        print()
+        print(f"  Run manifest: runs/ingest_run_*.json")
+        print(f"  Backfill state: state/backfill_state.json")
+        print()
+
     return 0
 
 def cmd_store_watch(args: argparse.Namespace) -> int:
@@ -465,6 +702,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-chunks", type=int, default=None)
     p.add_argument("--chunk-id", type=str, default=None)
     p.add_argument("--parse-extracts", action="store_true", default=False)
+    p.add_argument("--reparse-duplicate-attachments", action="store_true", default=False)
+    p.add_argument("--attachment-timeout-seconds", type=int, default=30)
+    p.add_argument("--max-items-per-chunk", type=int, default=500)
+    p.add_argument("--min-chunk-days", type=int, default=1)
+    p.add_argument("--item-progress-every", type=int, default=25)
     p.add_argument("--build-retrieval", action="store_true", default=False)
     p.add_argument("--build-index", action="store_true", default=False)
     p.add_argument("--build-vault", action="store_true", default=False)
@@ -538,6 +780,31 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", default=False, dest="as_json")
     p.add_argument("--store-root", type=str, default=None)
     p.set_defaults(func=cmd_store_bridge_query)
+
+    # store-health
+    p = sub.add_parser("store-health", help="Comprehensive store health report (read-only, no Outlook COM)")
+    p.add_argument("--json", action="store_true", default=False, dest="as_json")
+    p.add_argument("--store-root", type=str, default=None)
+    p.set_defaults(func=cmd_store_health)
+
+    # store-export-run
+    p = sub.add_parser("store-export-run", help="Run chunked export pipeline with visible progress")
+    p.add_argument("--since", type=str, default=None)
+    p.add_argument("--until", type=str, default=None)
+    p.add_argument("--resume", action="store_true", default=False)
+    p.add_argument("--batch-size", type=int, default=25)
+    p.add_argument("--once", action="store_true", default=False)
+    p.add_argument("--stop-on-error", action="store_true", default=False)
+    p.add_argument("--refresh-source", action="store_true", default=False)
+    p.add_argument("--parse-extracts", action="store_true", default=True)
+    p.add_argument("--reparse-duplicate-attachments", action="store_true", default=False)
+    p.add_argument("--attachment-timeout-seconds", type=int, default=30)
+    p.add_argument("--max-items-per-chunk", type=int, default=500)
+    p.add_argument("--min-chunk-days", type=int, default=1)
+    p.add_argument("--item-progress-every", type=int, default=25)
+    p.add_argument("--json-summary", action="store_true", default=False)
+    p.add_argument("--store-root", type=str, default=None)
+    p.set_defaults(func=cmd_store_export_run)
 
     # Stub commands
     for cmd_name in [
