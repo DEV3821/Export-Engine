@@ -524,31 +524,72 @@ def cmd_store_build_index(args: argparse.Namespace) -> int:
 
 
 def cmd_store_search(args: argparse.Namespace) -> int:
-    from .index import search_index
+    """Search the local evidence store via the public retrieval API."""
+    from .retrieval import search as retrieval_search
     store_root = args.store_root or get_store_root()
+    # Support both --limit (store-search) and --max-results (retrieval-search)
+    limit = getattr(args, "limit", None) or getattr(args, "max_results", 10)
     try:
-        results = search_index(args.query, store_root, limit=args.limit, as_json=args.as_json)
+        response = retrieval_search(
+            query=args.query,
+            max_results=limit,
+            since_days=getattr(args, "since_days", None),
+            store_root=store_root,
+        )
     except Exception as e:
         print(f"Search error: {e}")
         return 1
-    if args.as_json:
+
+    if getattr(args, "as_json", False):
         import json
-        print(json.dumps(results, indent=2, ensure_ascii=False))
+        print(json.dumps({
+            "query": response.query,
+            "max_results": response.max_results,
+            "since_days": response.since_days,
+            "status": response.status,
+            "result_count": response.result_count,
+            "results": [
+                {
+                    "record_id": r.record_id,
+                    "source_type": r.source_type,
+                    "title": r.title,
+                    "subject": r.subject,
+                    "folder_path": r.folder_path,
+                    "received_at": r.received_at,
+                    "sent_at": r.sent_at,
+                    "conversation_id": r.conversation_id,
+                    "snippet": r.snippet,
+                    "score": r.score,
+                }
+                for r in response.results
+            ],
+            "warnings": response.warnings,
+        }, indent=2, ensure_ascii=False))
         return 0
-    if not results:
-        print("No results found.")
-        return 0
-    print(f"Search results for: {args.query}")
-    print(f"Results: {len(results)}")
+
+    print(f"Engine Exporter — search")
+    print(f"Query: {response.query}")
+    print(f"Results: {response.result_count}  Status: {response.status}")
+    if response.since_days is not None:
+        print(f"Recency: last {response.since_days} days")
     print()
-    for i, r in enumerate(results[:args.limit], 1):
-        print(f"{i}. {r.get('title', 'No title')}")
-        print(f"   Path: {r.get('folderPath', 'N/A')}  Date: {r.get('date', 'N/A')}")
-        print(f"   Kind: {r.get('sourceKind', r.get('parentType', ''))}")
-        text = r.get('text', '')
-        preview = text[:200].replace('\n', ' ') if text else '(no text)'
-        print(f"   {preview}...")
+    print("Local store search. No Outlook COM, no LLM, no cloud/API calls.")
+    print()
+
+    for i, r in enumerate(response.results[:limit], 1):
+        print(f"{i}. {r.title or '(no title)'}")
+        fp = r.folder_path or "N/A"
+        dt = r.received_at or r.sent_at or "N/A"
+        print(f"   Path: {fp}  Date: {dt}")
+        print(f"   Type: {r.source_type}  Score: {r.score:.1f}")
+        print(f"   {r.snippet[:200]}")
         print()
+
+    for w in response.warnings:
+        print(f"Warning: {w}")
+
+    if not response.results and not response.warnings:
+        print("No results found.")
     return 0
 
 
@@ -1077,11 +1118,19 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("store-search", help="Local SQLite search (no LLM, no API)")
     p.add_argument("--query", type=str, required=True)
     p.add_argument("--limit", type=int, default=10)
+    p.add_argument("--since-days", type=int, default=None, dest="since_days")
     p.add_argument("--json", action="store_true", default=False, dest="as_json")
     p.add_argument("--store-root", type=str, default=None)
     p.set_defaults(func=cmd_store_search)
 
-    # store-query
+    # retrieval-search (Phase 1.8I — public API CLI)
+    p = sub.add_parser("retrieval-search", help="Public retrieval search API (no LLM, no API)")
+    p.add_argument("--query", type=str, required=True)
+    p.add_argument("--max-results", type=int, default=10, dest="max_results")
+    p.add_argument("--since-days", type=int, default=None, dest="since_days")
+    p.add_argument("--json", action="store_true", default=False, dest="as_json")
+    p.add_argument("--store-root", type=str, default=None)
+    p.set_defaults(func=cmd_store_search)
     p = sub.add_parser("store-query", help="Local evidence query (no LLM, no API)")
     p.add_argument("--query", type=str, required=True)
     p.add_argument("--limit", type=int, default=10)
