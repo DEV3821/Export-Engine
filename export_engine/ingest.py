@@ -332,6 +332,7 @@ def _enumerate_outlook_items(
     store_id_hash: str,
     export_run_id: str,
     outlook_ctx: dict[str, Any] | None = None,
+    max_items: int = 0,
 ) -> list[dict[str, Any]]:
     """Enumerate real Outlook items for a folder+date chunk.
 
@@ -416,6 +417,9 @@ def _enumerate_outlook_items(
 
         for item in items:
             try:
+                # Early break if max_items is reached (applies to THIS enumeration)
+                if max_items > 0 and len(records) >= max_items:
+                    break
                 msg_class = str(item.Class) if hasattr(item, "Class") else ""
                 if "Mail" not in msg_class and "IPM.Note" not in str(getattr(item, "MessageClass", "")):
                     continue
@@ -796,17 +800,32 @@ def run_ingest(
         # Also include runtime sub-chunks (from dense splitting) that are pending
         for scid, sc in state_chunks.items():
             if sc.get("parentChunkId") and sc.get("status") == "pending":
-                # Build a minimal chunk dict from state info
+                # Build sub-chunk from state info (may not have parent in plan)
                 parent_id = sc.get("parentChunkId", "")
                 parent_chunk = next((c for c in plan["chunks"] if c["chunkId"] == parent_id), None)
-                if parent_chunk:
+                if parent_chunk is None:
+                    # Sub-chunk from a parent that's no longer in the plan
+                    # Build from state metadata
+                    sub_chunk = {
+                        "chunkId": scid,
+                        "folderKey": "",
+                        "folderPath": "",
+                        "displayName": "Inbox",
+                        "defaultRole": "inbox",
+                        "since": sc.get("since", ""),
+                        "until": sc.get("until", ""),
+                        "estimatedItems": 1600,
+                        "_is_split_subchunk": True,
+                        "_parentChunkId": parent_id,
+                    }
+                else:
                     sub_chunk = dict(parent_chunk)
                     sub_chunk["chunkId"] = scid
                     sub_chunk["since"] = sc.get("since", parent_chunk.get("since", ""))
                     sub_chunk["until"] = sc.get("until", parent_chunk.get("until", ""))
                     sub_chunk["_is_split_subchunk"] = True
                     sub_chunk["_parentChunkId"] = parent_id
-                    chunks_to_process.append(sub_chunk)
+                chunks_to_process.append(sub_chunk)
     else:
         chunks_to_process = [c for c in plan["chunks"]]
 
@@ -948,6 +967,7 @@ def run_ingest(
                 folder, chunk,
                 store_display_name, store_id_hash, export_run_id,
                 outlook_ctx=outlook_ctx,
+                max_items=total_limit or 0,
             )
 
         # Cap by remaining limit
