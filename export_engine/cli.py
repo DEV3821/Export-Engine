@@ -1032,6 +1032,9 @@ def cmd_store_live_refresh_once(args: argparse.Namespace) -> int:
     print("=" * 60)
     for em in result.get("errorMessages", []):
         print(f"  Error: {em}")
+    if result.get("errors", 0) > 0:
+        print("  WARNING: refresh completed with errors; failed folder high-watermarks were not advanced.")
+        return 1
     return 0 if result.get("newRecords", 0) >= 0 else 1
 
 

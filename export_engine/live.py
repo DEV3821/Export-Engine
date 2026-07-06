@@ -295,8 +295,15 @@ def live_refresh_once(
                     "changedRecords": changed_count,
                 })
 
-                # Update high-watermark
-                high_watermarks[fk] = now_iso
+                # Update this folder's high-watermark only after a clean folder refresh.
+                # If _refresh_folder reports item-level errors, leave this folder's
+                # high-watermark unchanged so the next run can retry the same window.
+                if err_count == 0:
+                    high_watermarks[fk] = now_iso
+                else:
+                    result["errorMessages"].append(
+                        "Error refreshing " + fp + ": " + str(err_count) + " item/folder errors"
+                    )
             except Exception as e:
                 result["errors"] += 1
                 result["errorMessages"].append("Error refreshing " + fp + ": " + str(e))
@@ -306,10 +313,19 @@ def live_refresh_once(
         except Exception:
             pass
 
-    # Update high-watermark summary
+    # Update high-watermark summary. Summary watermarks advance only to the
+    # newest successfully advanced per-folder watermark for that category.
+    # Failed folders keep their previous high-watermark and therefore remain
+    # retryable on the next incremental refresh.
     state["highWatermarks"] = high_watermarks
-    state["inboxHighWatermark"] = now_iso
-    state["sentItemsHighWatermark"] = now_iso
+    inbox_keys = {f.get("folderKey", "") for f in inbox_folders if f.get("folderKey")}
+    sent_keys = {f.get("folderKey", "") for f in sent_folders if f.get("folderKey")}
+    inbox_marks = [high_watermarks.get(k, "") for k in inbox_keys if high_watermarks.get(k, "")]
+    sent_marks = [high_watermarks.get(k, "") for k in sent_keys if high_watermarks.get(k, "")]
+    if inbox_marks:
+        state["inboxHighWatermark"] = max(inbox_marks)
+    if sent_marks:
+        state["sentItemsHighWatermark"] = max(sent_marks)
     state["newRecordsLastRun"] = result["newRecords"]
     state["changedRecordsLastRun"] = result["changedRecords"]
     state["duplicatesSkippedLastRun"] = result["duplicatesSkipped"]
@@ -360,7 +376,10 @@ def _refresh_folder(
     Returns (newCount, changedCount, duplicateCount, errorCount).
     No mailbox write. No kanban write.
     """
-    from .outlook_com_source import normalise_outlook_folder_path
+    from .outlook_com_source import (
+        normalise_outlook_folder_path,
+        resolve_com_folder_by_path,
+    )
 
     fp = folder_entry.get("folderPath", "")
     fk = folder_entry.get("folderKey", "")
